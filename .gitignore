@@ -1,0 +1,23 @@
+# Flutter 项目相关
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+
+# 平台构建产物
+android/.gradle/
+android/local.properties
+android/app/build/
+ios/Pods/
+ios/.symlinks/
+windows/flutter/ephemeral/
+windows/build/
+linux/flutter/ephemeral/
+macos/flutter/ephemeral/
+
+# 其它
+*.log
+# 注意：刻意不忽略 pubspec.lock —— 应用（而非库）应提交 lock 文件以保证依赖可复现

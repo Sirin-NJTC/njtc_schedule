@@ -1,0 +1,1347 @@
+# 构建说明（BUILD_NOTES）
+
+本项目**只面向 Android**（Windows 桌面平台已移除），并在
+**Flutter 3.47.6 stable（Dart 3.13.5）** 上完整验证通过：
+
+`flutter pub get` / `flutter analyze` / `flutter test` /
+`flutter build apk --debug` / `flutter build apk --release` /
+**Android 模拟器（API 37）实测安装运行**。
+
+## 1. 环境要求
+
+| 项目 | 必需工具 |
+| --- | --- |
+| 通用 | **Flutter SDK ≥ 3.27**（更低版本会因 `CardThemeData`、`Color.withValues` 等 API 报错） |
+| Android | Android SDK（`platforms;android-36` 与 `build-tools;36.0.0`）+ **JDK 17~21** |
+
+检查环境是否就绪：
+
+```bash
+flutter doctor -v
+```
+
+> `flutter doctor` 可能报 `Android license status unknown`，原因是缺少
+> `cmdline-tools` 组件。Gradle 只读 `licenses/` 目录下的许可文件，
+> **不影响构建**；若要消除该提示，装一次 `cmdline-tools` 并执行
+> `flutter doctor --android-licenses` 即可。
+
+## 2. 首次构建
+
+```bash
+cd njtc_schedule
+flutter pub get
+```
+
+### 重新生成平台工程（仅在缺少 `android/` 时才需要）
+
+仓库已包含完整的 `android/` 平台工程（Flutter 3.47.6 的官方脚手架，
+使用 **Kotlin DSL**：`android/app/build.gradle.kts`、`settings.gradle.kts`）。
+若你要用自己版本的 Flutter 重新生成：
+
+```bash
+flutter create --platforms=android --org cn.edu.njtc .
+```
+
+> 注意：该命令会额外生成 `test/widget_test.dart`（模板计数器测试），
+> 它与本项目无关，**请删除后再跑 `flutter test`**，否则会因找不到 `MyApp` 而失败。
+> 另外它会覆盖 `MainActivity.kt`，**务必先备份**
+> `android/app/src/main/kotlin/cn/edu/njtc/njtc_schedule/` 整个目录
+> （提醒功能的原生实现全在里面）。
+
+## 3. 常见构建故障（务必先读）
+
+### 3.1 `Could not close incremental caches`（项目与 pub 缓存跨盘符）
+
+若项目在 D 盘而 pub 缓存默认在 C 盘（`C:\Users\<你>\AppData\Local\Pub\Cache`），
+Kotlin 增量编译对插件源码做 `relativeTo()` 时会抛
+`IllegalArgumentException: this and base files have different roots`，
+表现为插件编译任务失败：
+
+```
+Execution failed for task ':shared_preferences_android:compileDebugKotlin'.
+> java.lang.Exception: Could not close incremental caches in ...\caches-jvm\jvm\kotlin:
+  class-fq-name-to-source.tab, source-to-classes.tab, internal-name-to-source.tab
+```
+
+真正的原因藏在 `Suppressed` 里，**不要被 `Could not close incremental caches`
+这句表象误导**（换 JDK、杀 Java 进程、清 `build/` 都无效）。
+
+**解法**：在 `android/gradle.properties` 里关闭增量编译（本项目已加）：
+
+```properties
+# 项目在 D: 盘而 pub 缓存在 C: 盘时，Kotlin 增量缓存无法跨盘符计算相对路径，
+# 会导致 compileDebugKotlin 报 "Could not close incremental caches"。
+kotlin.incremental=false
+```
+
+### 3.2 `file_picker` 与 `flutter_plugin_android_lifecycle` 的 compileSdk 冲突
+
+`file_picker` 8.x / 9.x 的 `android/build.gradle` 硬编码 `compileSdk 34`，
+而 `flutter_plugin_android_lifecycle` 要求 36，会报：
+
+```
+Dependency ':flutter_plugin_android_lifecycle' requires libraries and applications
+that depend on it to compile against version 36 or later of the Android APIs.
+:file_picker is currently compiled against android-34.
+```
+
+**解法**：`file_picker` **必须 ≥ 10.3.10**（该版本起改为
+`compileSdk flutter.compileSdkVersion`）。**请勿降级。**
+
+### 3.3 JDK 版本：用 17~21，不要用 22+
+
+Java 25 会打印 `A restricted method in java.lang.System has been called`
+一类告警，且 AGP / Kotlin 官方支持上限是 21。可用下面的命令指定 JDK：
+
+```bash
+flutter config --jdk-dir "C:\Program Files\Android\openjdk\jdk-21.0.8"
+```
+
+### 3.4 其他注意
+
+* 删除 `build/` 时用 `cmd /c rd /s /q build`；
+  PowerShell 的 `Remove-Item -Recurse -Force` 在深层路径上可能静默失败。
+* 多个 `flutter` 命令**不要并发**执行，会争抢启动锁。
+  卡在 `Storage ... is already registered` 时，先
+  `Get-Process java | Stop-Process -Force`。
+* 构建日志里 `SDK processing. This version only understands SDK XML versions
+  up to 3 but an SDK XML file of version 4 was encountered.` 是无害告警。
+
+### 3.5 （已不适用）桌面端的 symlink 报错
+
+本项目已删除 `windows/` 平台，**不会再遇到** `Building with plugins requires
+symlink support.`。若你自行加回桌面平台，Windows 上创建符号链接需要管理员
+权限或开发者模式；免管理员的绕过办法是预先手工建立目录联接（junction），
+原理是 Flutter 源码 `flutter_plugins.dart` 的 `_createPlatformPluginSymlinks`
+里有 `if (link.existsSync()) { continue; }` —— 链接已存在就会被跳过。
+
+## 4. 运行
+
+```bash
+# 列出可用设备（模拟器需先启动）
+flutter devices
+
+# 在真机 / 模拟器上运行
+flutter run -d <device-id>
+
+# 启动一个已创建的 AVD
+flutter emulators
+flutter emulators --launch <emulator-id>
+```
+
+## 5. 测试与静态检查
+
+```bash
+flutter analyze   # 期望：No issues found!
+flutter test      # 期望：All tests passed!（87 个用例）
+```
+
+测试包含：
+
+* `test/timetable_parser_test.dart` —— 解析器单元测试（含一格多课、单双周、
+  页脚学期起始日期与总周数、以及「周次不得退化」「时间字段不在第 0 段」两条回归用例）
+* `test/xls_reader_test.dart` —— 用 `test/fixtures/njtc_sample.xls`
+  （真实教务系统导出文件）验证 `.xls` 读取链路
+* `test/zf_html_parser_test.dart` —— 用 `test/fixtures/zf_xskb_list.html`
+  （正方教务课表页固件）验证 HTML 解析器：rowspan/colspan 不重复计课、
+  `<hr>` 与 `-----` 两种分格多课写法、`title` 字段（教师 / 周次(节次) / 地点 / 教学班）、
+  元信息（学期 / 专业 / 起始日期 / 总周数）、非课表页面识别
+* `test/web_import_test.dart` —— 网页导入解析链路四级兜底
+  （正方 jwglxt JSON 接口 → 正方结构 → 任意 HTML 表格 → 纯文本），
+  以及非 Android 平台直接返回失败、不触碰原生通道
+* `test/timetable_grid_test.dart` —— 网格渲染：同格冲突课并排不互相覆盖、
+  第 11 节（旧版写死 10 节）能显示、单双周角标、非本周课不出现、
+  「今天」高亮只在当前周出现
+* `test/home_page_test.dart` —— 首页周次交互：周次选择弹窗（选周即切）、
+  「回到本周」按钮的显示与消失、首周 / 末周箭头禁用、
+  未设起始日期时的提示、空课表空状态
+* `test/app_flow_test.dart` —— 端到端：真实 `.xls` 字节 → `XlsReader` →
+  `TimetableParser` → `Timetable` → 真实 `pumpWidget` 渲染 `TimetableGrid`，
+  断言 20 门课程被正确解析、7 个星期表头与真实课程名出现在渲染树中、
+  该周激活课程数 == `CourseCard` 个数（第 9 周为 15 个），
+  并验证切换周次后单周 / 双周课程真的在界面上互换
+
+### 5.1 真机 / 模拟器上的端到端验证
+
+`integration_test/` 下的用例会真的调用原生通道、排布真实闹钟并发送真实通知：
+
+```bash
+flutter test integration_test/reminder_e2e_test.dart -d <device-id>
+```
+
+网页登录导入的端到端验证（用本地固件页代替真实教务系统，**不需要登录**）：
+
+```bash
+# 1) 宿主机起一个固件 HTTP 服务（端口随意，别用 8080 —— 常被其它软件占用）
+python -m http.server 8137 --bind 0.0.0.0 --directory D:\DSH\njtc_schedule\test\fixtures
+# 2) 跑用例（用例内用 10.0.2.2 指向宿主机；真机请直接换成真实网址）
+flutter test integration_test/web_import_e2e_test.dart -d <device-id>
+```
+
+上面这条走的是**渲染后的 DOM**（`#kbtable` / `.kbcontent` 抠字段）。
+App 还有一条优先级更高的路径：在课表页里顺手 POST 一发
+`xskbcx_cxXskbcxIndex.html?doType=query&gnmkdm=N2151`，直接吃 `kbList`
+原始 JSON（整学期数据，比 DOM 稳）。这条路径用另一个固件服务验证：
+
+```bash
+# 1) 能应答 POST 的固件服务（GET 给课表页，POST 给 kbList JSON）
+python tool/jwglxt_fixture_server.py 8138
+# 2) 跑用例
+flutter test integration_test/jwglxt_json_e2e_test.dart -d <device-id>
+```
+
+> `WebImportActivity` 支持一个**仅供自动化测试**的 `autoRead` 参数：页面加载后
+> 自动等课表标记出现再读取，等价于用户点一次「读取课表」。真实使用时不会走到
+> 这条路径（默认 `autoRead=false`）。
+>
+> ⚠️ 调试 WebView 时，`adb logcat -d`（事后取）通常已经拿不到日志（缓冲区滚动），
+> 必须**在测试运行期间**抓：`adb logcat -c` + `adb logcat -v time > 文件`。
+> 原生侧日志统一带 `NjtcWebImport` 标签，可用 `-s NjtcWebImport` 过滤。
+
+跑完后可在宿主机上复核原生侧的真实状态：
+
+```bash
+adb shell dumpsys alarm | grep -i -A 3 njtc
+adb shell dumpsys notification --noredact | grep -A 30 "notification.superx"
+```
+
+该用例会**故意保留**已排布的计划与已发出的通知，方便上面两条命令复核。
+
+> ⚠️ `flutter test integration_test` 在测试结束后会**自动卸载 App**，
+> 卸载后它的闹钟与通知都会消失。如果要用 `dumpsys` 取证，必须在测试
+> **运行期间**执行（本用例末尾刻意停留 75 秒，就是为这个窗口留的时间）。
+
+若设备是 Android 13+，先授予通知权限才能看到通知：
+
+```bash
+adb shell pm grant cn.edu.njtc.njtc_schedule android.permission.POST_NOTIFICATIONS
+adb shell appops set cn.edu.njtc.njtc_schedule SCHEDULE_EXACT_ALARM allow
+```
+
+## 6. 打包
+
+```bash
+# 通用 APK（产物在 build/app/outputs/flutter-apk/app-release.apk）
+flutter build apk --release
+
+# 按 ABI 拆分（体积更小，推荐分发用）
+flutter build apk --release --split-per-abi
+
+# 上架用 AAB
+flutter build appbundle --release
+```
+
+Android 发布签名（可选）——当前 `--release` 用的是 Flutter 模板默认的
+**debug 签名**（`CN=Android Debug`），可直接安装但**不能上架**：
+
+```bash
+keytool -genkey -v -keystore njtc-release.jks -keyalg RSA -keysize 2048 \
+        -validity 10000 -alias njtc
+```
+
+然后把 `njtc-release.jks` 放到 `android/app/`，在 `android/key.properties` 中配置：
+
+```properties
+storePassword=<密码>
+keyPassword=<密码>
+keyAlias=njtc
+storeFile=njtc-release.jks
+```
+
+最后在 `android/app/build.gradle.kts` 的 `signingConfigs` 中引用，并把
+`buildTypes.release` 的 `signingConfig` 从 `signingConfigs.getByName("debug")`
+改为你的配置。
+
+### 6.1 上架应用商店时关于精确闹钟权限的说明
+
+最终 APK 里会同时出现两个权限（`aapt2 dump badging` 可见）：
+
+```
+uses-permission: name='android.permission.SCHEDULE_EXACT_ALARM'
+uses-permission: name='android.permission.USE_EXACT_ALARM'
+```
+
+- `SCHEDULE_EXACT_ALARM` 是**用户可授予/可撤销**的权限，应用需要引导用户在系统
+  设置里打开「闹钟和提醒」。本项目已在提醒页内做了这项引导。
+- `USE_EXACT_ALARM` 是**系统自动授予、无法撤销**的权限，但 Google Play 对它做了
+  使用场景限制（官方只接受闹钟、日历/日程这类核心功能）。课程表属于日程类，
+  通常可以通过审核，但**提交审核时需在「权限声明」里说明用途**。
+- 如果不打算上架 Google Play（例如只在国内渠道或直接分发 APK），保留现状即可。
+  若审核被拒或不想承担该风险，从  `android/app/src/main/AndroidManifest.xml` 中删掉
+  `<uses-permission android:name="android.permission.USE_EXACT_ALARM"/>` 一行即可——
+  代码里 `ReminderScheduler` 对「无法使用精确闹钟」有完整降级路径
+  （返回 `exact=false` 并改用非精确的 `setAndAllowWhileIdle`），功能不受影响，
+  只是提醒时间可能有几分钟浮动。
+
+> 关于 `setAlarmClock`：提醒默认用 `setAlarmClock` 排布（系统按「用户闹钟」
+> 对待，Doze 与厂商省电都不会推迟），它同样受 `SCHEDULE_EXACT_ALARM`
+> 约束、同样需要「闹钟和提醒」权限；被拒绝时会自动退回
+> `setExactAndAllowWhileIdle` → `setAndAllowWhileIdle`。
+> 代价是状态栏可能出现一个闹钟小图标（依赖系统版本），
+> 若不想接受，把 `ReminderScheduler.kt` 里的 `USE_ALARM_CLOCK` 改为 `false` 即可。
+
+## 7. 关于课表文件格式（重要）
+
+内江师范学院教务系统（正方）导出的课程表是**老式 `.xls`（OLE2 / BIFF8）**，
+不是 `.xlsx`。Dart 生态里的 `excel` 包只支持 `.xlsx`（zip + XML 容器），
+直接喂 `.xls` 会解析失败。
+
+因此本项目自带一个纯 Dart 的极简 `.xls` 读取器：
+`lib/services/xls_reader.dart`。导入逻辑会先看文件头：
+
+* `D0 CF 11 E0 A1 B1 1A E1`（OLE2）→ 走 `XlsReader`
+* `50 4B 03 04`（zip）→ 走 `excel` 包按 `.xlsx` 解析
+
+两条路径都会交给 `TimetableParser.parseGrid` 变成课程。解析器还会从表格
+页脚（以「注」开头的那一行）提取**学期起始日期**与**总周数**，这两个值决定
+「当前第几周」以及课程提醒按哪一周生效，因此不可缺失。
+
+**退路**：万一遇到 `XlsReader` 也读不了的怪文件，可以在 Excel/WPS 里
+「另存为 `.xlsx`」后重新导入，或直接使用「粘贴课程表文本」方式。
+
+## 8. 课程提醒与 vivo 原子通知
+
+提醒功能的原生实现位于
+`android/app/src/main/kotlin/cn/edu/njtc/njtc_schedule/reminder/`，
+Dart 侧为 `lib/services/reminder_service.dart` 与
+`lib/pages/reminder_settings_page.dart`，两侧通过 MethodChannel
+`cn.edu.njtc.njtc_schedule/reminder` 通信。
+
+设计要点：
+
+* 一次性排布**未来 14 天**的精确闹钟（上限 240 个），并用一个
+  **每日 00:05 的巡检闹钟**滚动后移窗口 ⇒ 用户长期不打开 App 提醒也不会断。
+* 设备重启 / 应用更新后由 `BootReceiver` 从本地计划重建，不依赖 Flutter 层。
+* Android 12+ 若未授予精确闹钟权限，自动降级为 `setAndAllowWhileIdle`
+  （可能被系统延迟几分钟），不会崩溃。
+* 课程提醒投递到 vivo 原子通知需要向 vivo 申请准入，
+  详见 **[VIVO_ATOMIC_NOTIFICATION.md](VIVO_ATOMIC_NOTIFICATION.md)**。
+  未获准入时系统会忽略 superx 字段并按普通通知展示（纯增益，不会丢提醒）。
+
+## 9. 已在本机验证过的内容
+
+验证环境：Flutter 3.47.6 stable / Dart 3.13.5，Windows 11（10.0.29680.1000），
+JDK 21.0.8，Android SDK 36（build-tools 36.0.0）。
+测试设备：Android 模拟器 **API 37（Android 17）x86_64**。
+
+| 命令 | 结果 |
+| --- | --- |
+| `flutter pub get` | 通过 |
+| `flutter analyze` | `No issues found!` |
+| `flutter test` | `+78: All tests passed!` |
+| `flutter build apk --debug` | `app-debug.apk` — 152.06 MB |
+| `flutter build apk --release` | `app-release.apk` — 50.62 MB |
+| `flutter build apk --release --split-per-abi` | `app-armeabi-v7a-release.apk` 15.58 MB、`app-arm64-v8a-release.apk` 17.97 MB、`app-x86_64-release.apk` 19.4 MB |
+| 在 Android 模拟器（API 37，x86_64）安装并启动 | **成功** —— 界面正常渲染、日志无崩溃，实测截图见 `D:\DSH\dist\screenshot-release-*.png` |
+| `flutter test integration_test/reminder_e2e_test.dart -d emulator-5554` | **`01:16 +1: All tests passed!`**，详见下方「提醒链路实测」 |
+| `flutter test integration_test/web_import_e2e_test.dart -d emulator-5554` | **`00:03 +1: All tests passed!`**（连跑两次均通过），详见下方「网页导入实测」 |
+| `flutter test integration_test/jwglxt_json_e2e_test.dart -d emulator-5554` | **`00:03 +1: All tests passed!`**，详见下方「正方 JSON 接口实测」 |
+
+### 9.1 提醒链路实测（Android 17 / API 37 模拟器）
+
+集成测试在真实设备上跑通了「课表 → MethodChannel → 原生排闹钟 → 发通知」全链路：
+
+```
+[E2E] 课程排到 周1 第1/2/3节；今天第 2 周
+[E2E] syncPlan → ok=true scheduled=12 horizon=14 exact=true next=2026-10-05(周一) 07:30
+[E2E] status  → platform=true vivo=false island=false brand=google sdk=37 notif=true exact=true
+                battery=false hasPlan=true count=12
+[E2E] preview(8) →
+        2026-10-05(周一) 07:30  [sessionPreview]  上午课程预告（提前 30 分钟）  端到端测试课程A @明德楼B216
+        2026-10-05(周一) 07:45  [lead]  上课前 15 分钟（仅时段首课）  端到端测试课程A @明德楼B216
+        2026-10-05(周一) 07:55  [lead]  上课前 5 分钟（每一节课）  端到端测试课程A @明德楼B216
+        2026-10-05(周一) 08:50  [lead]  上课前 5 分钟（每一节课）  端到端测试课程A @明德楼B216
+        2026-10-05(周一) 09:35  [endPreview]  下课前 5 分钟预告  下节课：端到端测试课程B @明德楼A101  [下课]
+        2026-10-05(周一) 09:55  [lead]  上课前 5 分钟（每一节课）  端到端测试课程B @明德楼A101
+        2026-10-12(周一) 07:30  [sessionPreview]  上午课程预告（提前 30 分钟）  …（第二周同 6 条）
+[E2E] testNow(下节课预告) → vivo 原子通知（当前非 vivo 设备，字段已挂载但会被系统忽略）
+[E2E] testNow(时段预告) → 普通通知
+[E2E] testNow(上课提醒) → 普通通知
+```
+
+原生侧用 `dumpsys` 取证（**注意：`flutter test integration_test` 跑完会自动卸载
+App，卸载后闹钟与通知一并消失，所以必须在运行期间取证**）：
+
+* `adb shell dumpsys alarm` —— 抓到 **1 个 `DAILY_DRIVER`（当日 00:05）
+  + 12 个 `COURSE_REMINDER`**，全部 `RTC_WAKEUP` 精确闹钟；12 条分两组、
+  相隔恰好 604800000 ms（7 天），单日 6 条落在
+  **07:30 / 07:45 / 07:55 / 08:50 / 09:35 / 09:55** —— 正好对应
+  上午首课的时段预告 → 时段首课 15 分钟 → 第 1、2 节各 5 分钟 →
+  第 2 节下课前的下节课预告 → 第 3 节 5 分钟；
+  **08:40 不存在**（第 1→2 节同名、同地点、节次连号 = 连堂，按规则不发预告）。
+  另外，12 个课程闹钟的 dump 里都带
+  `showIntent=PendingIntent{… startActivity}`，而 00:05 的巡检闹钟没有 ——
+  这正好证明提醒走的是 `setAlarmClock`（系统当作用户闹钟，Doze / 省电都不推迟），
+  巡检仍走 `setExactAndAllowWhileIdle`。
+* `adb shell dumpsys notification --noredact` —— 抓到 3 条通知记录：
+  `id=6600` / `id=6604` 走 `njtc_course_reminder`（上课提醒，importance=4）、
+  `id=6603` 走 `njtc_course_end`（下节课预告，importance=3，**带全部 14 个
+  `notification.superx.*` 键**）。完整的 superx 键值见
+  [VIVO_ATOMIC_NOTIFICATION.md](VIVO_ATOMIC_NOTIFICATION.md) 第 5.3.1 节。
+  取证前要先 `adb shell pm grant cn.edu.njtc.njtc_schedule
+  android.permission.POST_NOTIFICATIONS`，否则 Android 13+ 不会记录通知。
+
+数据链路验证：真实 `.xls` 经 `XlsReader` 读出的 **72 个单元格与 Python `xlrd`
+结果逐字一致**，端到端解析出 **20 门课程**（周一~周五），字段
+（课程名 / 节次 / 周次 / 单双周 / 地点 / 教师 / 课程代码 / 教学班）全部正确。
+
+APK 元数据（`aapt2 dump badging`）：包名 `cn.edu.njtc.njtc_schedule`、
+`versionName=1.1.1`（`pubspec.yaml` 的 `version: 1.1.1+3`）、
+`versionCode` = universal `3` / armeabi-v7a `1003` / arm64-v8a `2003` /
+x86_64 `4003`（`--split-per-abi` 会自动加 `1000 × ABI 序号`）、
+`minSdkVersion=24`、`targetSdkVersion=36`、`compileSdkVersion=36`、
+应用名 **内师课程表**、入口 `cn.edu.njtc.njtc_schedule.MainActivity`。
+
+> 版本号有两处，必须同步：`pubspec.yaml` 的 `version:` 决定 APK 文件名与
+> `versionCode`，`lib/pages/settings_page.dart` 里「关于」卡片的
+> `内江师范学院课程表 v1.1.1` 是给人看的显示串（Flutter 不提供免依赖的
+> 运行时读版本号能力，所以这里是硬编码 + 注释提醒同步）。
+
+> ⚠️ 当前 `--release` APK 用的是 Flutter 模板默认的 **debug 签名**
+> （`CN=Android Debug`）：可以直接安装到手机使用，但**不能上架应用商店**。
+> 正式发布请按第 6 节生成自己的 `njtc-release.jks` 并配置 `signingConfigs`。
+
+### 9.2 网页导入实测（Android 17 / API 37 模拟器）
+
+`integration_test/web_import_e2e_test.dart` 在模拟器里跑通了
+「真实 WebView 打开课表页 → 注入 JS 抓取 → 原生写文件回传 → Dart 解析」全链路
+（**连跑两次均通过**）：
+
+```
+[E2E-WEB] 打开 http://10.0.2.2:8137/zf_xskb_list.html
+[E2E-WEB] status=WebImportStatus.ok message=已识别 9 门课
+[E2E-WEB] pageUrl=http://10.0.2.2:8137/zf_xskb_list.html title=学生课表
+[E2E-WEB] rawText 长度=702
+[E2E-WEB] 课表：学期=2026-2027年第1学期 / 专业=机器人工程 / 周数=20 /
+          起始=2026-08-31 / 课程数=9
+          人工智能导论 | 韩云 | 明德楼B216 | 周1 第1-2节 7-18周
+          高等数学Ⅰ（上） | 曾玉祥 | 明德楼A103 | 周1 第3-4节 7-18周
+          思想道德与法治 | 代维 | 明德楼B303 | 周1 第9-10节 12-14周
+          ……（共 9 门，2026-08-31 起 20 周）
+00:02 +1: All tests passed!
+```
+
+原生侧日志（`adb logcat -s NjtcWebImport`）显示抓取与回传都正常：
+
+```
+onCreate autoRead=true
+onPageStarted http://10.0.2.2:8137/zf_xskb_list.html
+onPageFinished url=http://10.0.2.2:8137/zf_xskb_list.html title=学生课表
+probe raw="true" hit=true … autoRead=true done=false attempts=0
+autoRead timer -> extract (finishing=false destroyed=false)
+extract start url=… / extract value len=5831
+finishWithPayload len=4128
+MainActivity.onActivityResult req=20750 res=-1
+onActivityResult resultCode=-1 pending=true path=…/cache/webimport_payload.json error=null
+```
+
+> ⚠️ 踩坑记录：`WebView.evaluateJavascript` 的回调值是**结果的 JSON 表示** ——
+> JS 里 `return 'true'`（字符串）回调拿到的是**带引号**的 `"true"`，
+> 直接 `value == "true"` 会恒为 false。表现为「页面明明是课表却探测不到」，
+> 测试长时间挂起后收到一个 `RESULT_CANCELED`。必须
+> `value.trim('"') == "true"`（见 `WebImportActivity.jsIsTrue`）。
+
+### 9.3 交付版 APK 实机冒烟（release 构建，非 debug 构建）
+
+上述 E2E 跑的是 `flutter test integration_test` 装的 **debug** 构建。为了确认
+交付到 `D:\DSH\dist\` 的 **release** 构建本身也能跑，另做了一次冒烟：
+
+```
+adb install -r 内师课程表-1.1.1-x86_64.apk        → Success
+adb shell am start -n cn.edu.njtc.njtc_schedule/.MainActivity
+adb shell pidof  cn.edu.njtc.njtc_schedule        → 5909（进程存活）
+adb shell dumpsys activity activities | grep topResumedActivity
+    → cn.edu.njtc.njtc_schedule/.MainActivity
+adb logcat | grep -E 'FATAL|AndroidRuntime|E/flutter'   → 无输出
+```
+
+截图：首页空状态（`dist/screenshot-release-build.png`）→ 点「导入课表」进入导入页
+（`dist/screenshot-release-import.png`，三张卡片 + 「网页导入怎么用」齐全）→
+点第一张卡打开原生 WebView（`dist/screenshot-release-webimport.png`）：
+
+```
+I/NjtcWebImport: onCreate autoRead=false
+I/NjtcWebImport: onPageStarted https://tpass.njtc.edu.cn/auth/oauth/login
+I/NjtcWebImport: onPageFinished url=… title=统一身份认证中心
+I/NjtcWebImport: probe raw="false" hit=false url=… autoRead=false done=false attempts=0
+```
+
+这是一次**真实联网**验证：模拟器直连学校统一身份认证中心（页面为内江师范学院
+「账号密码 / 手机验证码 / APP扫码」登录页），说明
+① release 构建的 WebView 通路可用；② `probe` 在登录页正确判定为「非课表」；
+③ 校园网入口无需 VPN 即可访问。
+
+### 9.4 正方 JSON 接口实测（Android 17 / API 37 模拟器）
+
+`integration_test/jwglxt_json_e2e_test.dart` + `tool/jwglxt_fixture_server.py`
+验证了「注入脚本在课表页里 POST 数据接口」这条**优先路径**（DOM 抠字仍作为兜底）：
+
+```
+[E2E-JSON] 打开 http://10.0.2.2:8138/jwglxt/kbcx/xskbcx_cxXskbcxIndex.html
+[E2E-JSON] status=WebImportStatus.ok message=已从教务接口识别 6 门课
+[E2E-JSON] 课表：学期=2026-2027年第1学期 / 周数=18 / 课程数=6
+           人工智能导论 | 韩云 | 明德楼B216 | 周1 第1-2节 7-18周 单双周=0
+           高等数学Ⅰ（上） | 曾玉祥 | 明德楼A103 | 周1 第3-4节 1-16周 单双周=0
+           大学物理V（上） | 张熙程 | 明德楼B105 | 周4 第7-8节 1-15周 单双周=1
+           思想道德与法治 | 代维 | 明德楼B303 | 周5 第9-10节 1-1周 单双周=0
+           思想道德与法治 | 代维 | 明德楼B303 | 周5 第9-10节 3-3周 单双周=0
+           思想道德与法治 | 代维 | 明德楼B303 | 周5 第9-10节 5-9周 单双周=0
+```
+
+要点：
+
+* 端点是**推出来的**，不是写死的：`location.pathname` 匹配 `/…/(kbcx|xtgl|
+  xsxxxggl|xkgl)/` 后拼回 `origin + 前缀 + /kbcx/xskbcx_cxXskbcxIndex.html`。
+  不同学校的路径前缀不同（有的 `/jwglxt`，有的直接根目录），写死一定会错。
+* 学年 / 学期码从页面控件读（`#xnm` / `#xqm`），`3`=第一学期、`12`=第二学期。
+* 页面上没有「共 N 周」时，总周数由 `max(zcd 里的周次)` 反推。
+* **离散周次要逐段保留**：`1,3,5-9周` 变成 3 门次（`1-1` / `3-3` / `5-9`），
+  不能补空隙 —— 补了会凭空多出没课的周次。
+* `kbList` 解析不出课程时会**回落到 DOM 路径**，不会返回一张空课表。
+
+### 9.5 release 构建的功能实测（导入 → 提醒 → 原子通知）
+
+`flutter test integration_test` 装的始终是 **debug** 构建，而交付到
+`D:\DSH\dist\` 的是 **release** 构建。两者的 dex 结构并不相同：release 由
+R8 处理过（实测 release 只有 1 个 `classes.dex`、类名被重命名；debug 有 11 个
+dex、类名原样），所以「debug 通过」**不能**推出「release 通过」。为此在
+release APK 上完整走了一遍真机流程：
+
+```
+adb uninstall cn.edu.njtc.njtc_schedule          # split 包 versionCode 比旧包大，必须先卸
+adb install -r 内师课程表-1.1.1-x86_64.apk        → Success
+adb shell pm grant cn.edu.njtc.njtc_schedule android.permission.POST_NOTIFICATIONS
+adb shell appops set cn.edu.njtc.njtc_schedule SCHEDULE_EXACT_ALARM allow
+```
+
+1. **文件导入**：`adb push test/fixtures/njtc_sample.xls /sdcard/Download/` →
+   导入页「导入教务系统导出的文件」→ 系统文件选择器（DocumentsUI）→ 下载 →
+   选中文件。结果：课表标题 `njtc_sample`、副标题
+   `2026-2027年第1学期 · 机器人工程`，网格正常渲染、`今天` 列高亮、
+   底部导航出现 ⇒ release 构建的自研 BIFF8 `.xls` 读取器与解析器可用。
+2. **提醒排布**：设置页「课程提醒」显示
+   `提前 30 / 15 / 5 分钟 · 下节课预告 · 已排布 55 个` ⇒ release 构建的
+   Kotlin 排布链路（MethodChannel → `ReminderScheduler`）可用。
+3. **提醒语义**：课程提醒页「最近的提醒（滚动 14 天）」按真实课表列出
+   `07:30 上午课程预告（提前 30 分钟）` → `07:45 上课前 15 分钟（仅时段首课）`
+   → `07:55 上课前 5 分钟` → `09:35 下课前 5 分钟预告 · 下节课：Python程序设计`
+   → `09:55 上课前 5 分钟` → `11:35 下课前 5 分钟预告 · 下节课：大学体育Ⅰ`
+   → `14:00 下午课程预告` → `14:15 上课前 15 分钟`，并显示
+   `已排布 55 个提醒（未来 14 天）· 使用精确闹钟`。
+4. **原子通知**：点「立即验证 → 下节课预告（vivo 走原子岛）」后
+   `adb shell dumpsys notification --noredact` 里出现
+
+   ```
+   pkg=cn.edu.njtc.njtc_schedule id=3403 channel=njtc_course_end
+   android.title=「人工智能导论」09:40 下课
+   android.text=下节课：下一节课 ·  · 地点待定
+   notification.superx.island=Bundle (dataSize=3032)
+   ```
+
+   **14 个 `notification.superx.*` 键全部齐全**（operation / template / scene /
+   keepDuration / sound / showNotify / dismissWhenKill / changedRecord /
+   clickResp / baseInfos / infos / shortInfos / capsule / island），
+   logcat 佐证：
+
+   ```
+   I/NjtcVivo: 已挂载 superx 字段：scene=METTING template=1 rightTemplate=6 keepDuration=1800s islandShowTime=180s
+   I/NjtcNotify: 已发送[vivo 原子通知（当前非 vivo 设备，字段已挂载但会被系统忽略）] id=3403
+   ```
+
+   ⇒ **R8 混淆不会破坏原子通知链路**。这一点是安全的：全工程没有任何
+   `addJavascriptInterface`，反射只指向**平台类**
+   （`android.os.FtBuild` / `android.util.FtBuild` / `android.os.FtFeature` /
+   `android.util.FtFeature` / `android.os.SystemProperties` /
+   `NotificationManager.getSceneStatus`），而 manifest 里声明的组件
+   （`MainActivity` / `WebImportActivity` / `ReminderReceiver` / `BootReceiver`）
+   由 AGP 生成的 aapt keep 规则保住类名，所以 obfuscation 只影响我们自己的
+   内部类名，调用方与被调用方一起改名，行为不变。
+
+### 9.6 真机实测（vivo 云真机）
+
+用户通过 vivo 云测平台在自己的真机上跑了一轮（设备序列号
+`10AE1C1NP80011G`），导出日志 `logs_10AE1C1NP80011G_1791088183247_export.log`
+（1.23 MB / 9026 行，覆盖 `12:25:47`~`12:29:30`）。**这是第一次在真实
+OriginOS + 真实教务系统上跑通全链路**，结论如下。
+
+```
+[12:26:03.958] NjtcWebImport: onPageFinished url=… title=个人课表查询
+[12:26:09.262] NjtcWebImport: extract start
+[12:26:09.917] NjtcWebImport: extract value len=77906
+[12:26:09.922] NjtcWebImport: finishWithPayload len=58095
+[12:26:09.940] NjtcWebImport: onActivityResult resultCode=-1 pending=true path=…/webimport_payload.json error=null
+[12:26:10.072] NjtcReminder: 每日巡检闹钟已设在 2026-10-05(周一) 00:05
+[12:26:10.072] NjtcReminder: 排布完成：共 45 个提醒闹钟（推导 45 个，上限 240），窗口 14 天，精确闹钟=true，最近一次=2026-10-06(周二) 09:30
+[12:26:10.072] NjtcReminder:   #0 2026-10-06(周二) 09:30 上课前 30 分钟（时段首课 · 整段预告） … 明德楼B309
+[12:26:10.072] NjtcReminder:   #1 2026-10-06(周二) 09:45 上课前 15 分钟（仅时段首课） … 明德楼B309
+[12:26:10.072] NjtcReminder:   #2 2026-10-06(周二) 09:55 上课前 5 分钟（每一节课） … 明德楼B309
+[12:26:10.082] VivoConfigStore: key:vivo.software.disable_island isCached is true and value is false
+```
+
+1. **网页登录导入在真实教务系统上跑通**：登录后停在真实页面
+   `个人课表查询`，点「读取课表」抓回 **77906 字符** HTML（模拟器固件只有
+   5831 字符），写出 **58095 字节** payload，`resultCode=-1` 正常回传。
+2. **解析 + 排布在真实课表上跑通**：import 回传后 **132 ms** 内完成排布 ——
+   `45 个提醒闹钟`、`精确闹钟=true`，课程地点是真实数据（明德楼B309 / B213 /
+   A203）。⇒ CAS 登录 → 正方 DOM → 解析 → 课表 → 提醒这一整条链路在真机上成立。
+3. **提醒四条语义在真实课表上同样正确**：周二首课 10:00 → 09:30 / 09:45 /
+   09:55 三条；周四 16:00 / 16:15 / 16:25、周五 16:00 / 16:15 / 16:25 ——
+   即「30/15 只给当天该时段首课、5 分钟每节课都有」。
+4. **原子岛能力判定在真实 ROM 上生效**：`12:26:10.082`、`12:26:50.453`、
+   `12:26:51.234` 三次出现 **我们进程（pid 16277）** 触发的
+   `VivoConfigStore: key:vivo.software.disable_island isCached is true and value is false`
+   —— 这是 `VivoHelper.disableIslandFeature()` 反射 `FtFeature` 后 ROM 侧打出的
+   回执，**value=false ⇒ 原子岛未被禁用**。反射链路在真机上可用
+   （此前只在模拟器上得到 `isVivo=false`）。
+5. **导出日志有隐私过滤**：URL 被替换成 `*****`、课程名被替换成 `************`
+   （通知文案与页面 URL 都拿不到原文），排障时只能靠 tag 与数字。
+
+**本轮据日志修掉的两个问题：**
+
+* `WebImportActivity.onDestroy()` 在 WebView 仍挂在窗口上时直接
+  `destroy()`，真机日志里对应
+  `cr_AwContents: WebView.destroy() called while WebView is still attached to window.`
+  +
+  `chromium: [ERROR:aw_browser_terminator.cc(156)] Renderer process (8785) crash detected (code -1).`
+  ⇒ 现在先 `(webView.parent as? ViewGroup)?.removeView(webView)` 再 `destroy()`。
+  只崩渲染进程、不影响主进程，但会刷错误日志，部分 ROM 还会连带回收页面。
+* `VivoHelper.deviceSummary()` **只返回 Map、不打日志**。真机上只能靠 ROM 自己
+  打的那条 `VivoConfigStore` 反推原子岛可用，`romVersion` 与 `sceneEnabled`
+  完全取不到 ⇒ 现在 `deviceSummary()` 会额外打一条
+  `I/NjtcVivo: 设备摘要 {isVivo=…, isIslandCapable=…, romVersion=…, sceneEnabled=…, …}`，
+  以后用户导出的 logcat 就能直接回答「支不支持原子岛 / 场景开关开没开」。
+
+> 本轮日志里**没有** `NjtcVivo`（挂 superx）与 `NjtcNotify`（发通知）两行 ——
+> 说明用户在这 4 分钟里只做了导入与排布，**没有点「立即验证 → 下节课预告」**，
+> 因此「原子通知在真机上以什么形态弹出」仍是未验证项（见
+> `VIVO_ATOMIC_NOTIFICATION.md` §5.3.2 的待办）。
+
+### 9.7 用户反馈四条（v1.1.2）
+
+用户拿到 1.1.1 后在真机上提了四条：
+
+> 为什么进入 APP 是横屏？而且导入课程没有老师和教室，登录时输入密码输入法直接黑屏了，
+> 还不能自己自定义添加课程。
+
+**① 横屏。** 真机是折叠屏，且两处 Activity 都没有声明方向 ⇒ 现在
+`AndroidManifest.xml` 里的 `.MainActivity` 与 `.webimport.WebImportActivity`
+都加了 `android:screenOrientation="portrait"`。课表是竖版长列表，锁竖屏同时
+也是下面 ③ 的缓解手段。
+
+**② 导入缺教师与教室 —— 根因是反向代理让 JSON 接口从未被请求。**
+内江师范的 jwglxt 挂在代理域名下：
+
+```
+https://jxglpt-njtc-edu-cn-s.proxy.njtc.edu.cn/sso/driotlogin?url=kbcx%2Fxskbcx_cxXskbcxIndex.html%3Fgnmkdm%3DN2151
+```
+
+`location.pathname` 是 `/sso/driotlogin`，**不含 `/kbcx/` 段**，而旧
+`tryJwglxtJson()` 第一行就是
+`var m = location.pathname.match(/^(.*?)(?:\/(?:kbcx|xtgl|xsxxxggl|xkgl)\/)/i);
+if (!m) { return null; }` ⇒ **直接放弃，那一枪从来没打出去**，只能退化成
+「抠 DOM → 通用表格 → 整页文字」，教师与地点就丢了。
+
+现在 `WebImportActivity` 的 `EXTRACT_JS` 多了 `endpointCandidates()`：除了原先
+按 pathname 推端点，还会从 `location.search`/`hash` 的 `url=` 参数里**连解两次码**，
+用 `/^(.*?)(?:kbcx|xtgl|xsxxxggl|xkgl)\//i` 反推出教务根路径，再拼
+`origin + '/' + base + 'kbcx/xskbcx_cxXskbcxIndex.html'`；候选端点按优先级去重后
+逐个试，命中第一个返回 `kbList` 的就用它（`xnm`/`xqm` 仍从页面控件读，读不到就
+**不发请求、绝不瞎猜**）。`controlValue()` 也改成遍历 document 与同源 iframe。
+
+同时补了**兜底**：真机 payload 里每格只有一行 `课名 地点`（反向代理后 DOM 没有
+`title=` 标注），旧 `_parseBlock` 会把整行当课名、`location` 留空。现在
+`_reTrailingPlace` 会把尾部 `XX楼A101` 拆出来当地点（拆完名字为空则不拆，避免把
+楼名当课程），`_parseFreeLine`（整页文字兜底）同样会摘出地点，并支持
+「星期一 / 周一」两种星期写法。
+
+> 佐证：真机日志行 `… ************ 明德楼B309 @`，格式（`ReminderScheduler.kt:118-121`）
+> 是 `… ${c.name} @${c.location}` ⇒ 也就是说 `c.location` 是**空串**，楼名被并进了课名。
+
+**③ 输入法导致黑屏。** 真机日志里这段时间**没有** renderer 崩溃、也没有新异常，
+时间点又正好落在横屏宽幅（注入触摸坐标 `x≈2250`）⇒ 大概率是「横屏 + 折叠屏 +
+`adjustResize` 压缩窗口」下 WebView 的渲染问题，锁定竖屏是主要缓解手段。若真机上
+仍然复现，下一轮再对 WebView 单独做处理（`setLayerType` / 延迟 resize）。
+
+**④ 自定义添加课程。** 新增 `lib/pages/course_edit_page.dart`：
+`openCourseEditor(BuildContext, {Course? original})` + `CourseEditPage`
+（课程名称 / 教师 / 地点 / 星期 / 节次区间 / 周次区间 / 单双周），入口三处 ——
+首页标题栏「+」、空状态「手动添加课程」、课程详情弹窗的「编辑 / 删除」。
+保存或删除后统一走 `AppState.updateTimetable()`，会自动落盘并**重排提醒闹钟**。
+没有任何课表时点「手动添加课程」会先自动建一份「我的课表」（学期起始日期留空，
+交给首页既有的告警引导用户去设置）。
+
+**新增诊断日志**（以后只靠用户导出的 logcat 就能定位解析问题）：
+
+```
+NjtcImport: 载荷 表格HTML=3577 文本=46 jsonRows=0 页面标题=学生课表 接口端点=
+NjtcImport: 解析来源=正方课表页 DOM 课程=9 有教师=9 有地点=9
+```
+
+四条解析路径（`教务接口 jsonRows` / `正方课表页 DOM` / `通用网页表格` / `整页文字`）
+各打一次「课程 / 有教师 / 有地点」三个数量，一眼就能看出是走了哪条路、教师与地点
+各解析出几门。
+
+**本轮验证**：`flutter analyze` → No issues found；`flutter test` →
+**87 个用例全绿**（新增 `test/course_edit_test.dart` 5 个 + 解析兜底 4 个）。
+`D:\DSH\dist\` 四个 1.1.2 包（universal 51.07 / arm64-v8a 18.10 /
+armeabi-v7a 15.72 / x86_64 19.59 MB，versionCode `4/1004/2004/4004`）。
+
+端点推导这段是**新代码、且只在真机页面上才会跑到**，所以另外用 Node 单独验了一遍：
+`D:\DSH\verify_endpoint_candidates.mjs` 会**从 `.kt` 里当场抽出
+`endpointCandidates()` 的源码**（不复制粘贴，避免测试副本与真身漂移）再执行，
+7 条断言全过：内江师范那条真实代理 URL 的**第一候选**就是
+`origin + /kbcx/xskbcx_cxXskbcxIndex.html`（老代码正是在这里 `return null`）；
+`url=jwglxt/kbcx/…` 这种带 context-path 的能拼对；常规部署 / 根路径部署 /
+把 `url=` 放在 hash 里都能认；认不出来时仍有固定两条兜底且顺序不变。
+
+**模拟器复核（1.1.2 x86_64 装到 API 37）**：
+* 首页标题栏出现新的「+」按钮，点进去是完整的「添加课程」表单；
+* 填 `Physics / Smith / B309`（周一 第 1-2 节）保存后立刻打日志 ——
+  `#2 2026-10-05(周一) 07:55 上课前 5 分钟（每一节课） Physics @B309`，
+  即**手动新增的课确实进了持久化并重排了提醒闹钟**（`${c.name} @${c.location}` 两个字段都对）；
+* 把系统强制转成横屏（`settings put system user_rotation 1`）后
+  `dumpsys window` 仍是 `mCurrentRotation=ROTATION_0`、截图仍是 `1080x2400`
+  ⇒ **竖屏锁定生效**。
+
+> 构建踩坑（值得记住）：`flutter test` 之后紧接着 `flutter build apk --release`，
+> `GeneratedPluginRegistrant.java` 里可能残留 `integration_test` 插件，导致
+> `程序包 dev.flutter.plugins.integration_test 不存在` 而构建失败；**重跑一次即自愈**。
+> 更阴的是失败后 `build/app/outputs/flutter-apk/app-release.apk` 还是**上一轮的旧文件**，
+> 脚本会把它当成新产物复制出去（本轮 universal 那份就一度是 1.1.1 改名）。
+> ⇒ 打包脚本现在先删 4 个旧 apk 再构建，并用 `aapt2 dump badging` 逐个核对 `versionName`。
+
+### 9.8 导入入口改融合门户 + 节次时间可自定义（v1.1.3）
+
+用户第二轮反馈（原文）：
+
+> 连接出了问题，使用这个链接让用户自己找到课程表界面再导入
+> pass.njtc.edu.cn/frontend/center_portal_njtc/home/index.html，
+> 另外课程开始结束时间要求自定义，这次的 log 如下：…
+
+**① 默认入口从「一步到位的 CAS 深链」改成融合门户首页。**
+
+真机日志显示旧入口那条 CAS 深链走不通：
+
+```
+13:02:47 onPageFinished … title=统一身份认证中心
+13:03:05 onPageFinished … title=We've got some trouble | - Webservice currently unavailable
+13:03:16 onReceivedError … net::ERR_FAILED
+13:03:29 onPageFinished … title=proxy.njtc.edu.cn/zytec_proxy/cas_login?redirect_uri=…
+```
+
+即 `tpass` → `proxy/zytec_proxy/cas_login` 这一跳服务端自己报错了。现在的做法是
+**把选择权交回用户**：默认打开融合门户首页，用户自己点进「课表查询」，看到课表后
+再点右上角「读取课表」；菜单里同时保留「直达课表查询页」（载 `JWGLXT_URL`）作为备选。
+
+* `PORTAL_URL = https://pass.njtc.edu.cn/frontend/center_portal_njtc/home/index.html`，
+  `DEFAULT_URL = PORTAL_URL`；原 CAS 深链改名 `JWGLXT_URL`（旧 `TIMETABLE_URL` 已删）。
+* **`KEY_LAST_URL` 的值从 `"last_url"` 改成 `"last_url_portal"`** —— 老用户机器上
+  存的是旧 CAS 深链，不换键名会被 resume 回旧地址、根本看不到新入口。
+* 菜单顺序：切换手机/电脑版 → 刷新页面 → 回到融合门户首页 → 直达课表查询页 → 清除登录状态。
+* Dart 侧 `lib/services/jwxt_service.dart` 的 `portalUrl` 同步改掉，并新增 `casUrl`
+  常量；失败文案与 `lib/pages/import_page.dart` 的四步说明都改成
+  「先登录融合门户，自己点进课表查询」。
+
+**② 节次（上下课）时间可自定义。**
+
+* `lib/models/period.dart`：`Period` 增加 `encode()` / `decode()` / `withTime()`；
+  新增模块级 `activePeriods` 与 `setActivePeriods()` / `resetActivePeriods()` /
+  `normalizePeriods()`（按 11 节补齐并 clamp）/ `periodsCustomized()` /
+  `firstInvalidSection()`；`periodOfSection()` 改读 `activePeriods`。
+  **`defaultPeriods` 的 11 条时间未改**（第 1 节 08:00-08:45 … 第 11 节 20:50-21:35）。
+* `lib/storage/period_store.dart`：键 `njtc_periods`，存 `["08:00-08:45", …]`，
+  **下标即节次-1**（不存节次号也不会错位）；解析不出东西时返回 null 回落默认。
+* `lib/app_state.dart`：`init()` 里**在 `syncReminders()` 之前**读回节次（提醒排布
+  用的就是这份时间）；新增 `periods` / `hasCustomPeriods` / `updatePeriods()` /
+  `resetPeriods()`，保存后会 `_syncAfterChange()` 重排闹钟。
+* 新页面 `lib/pages/period_settings_page.dart` + 设置页「节次时间」入口（`/periods` 路由）：
+  11 行，每行「第N节 + 开始 ~ 结束 + 时长」，点时间走 `showTimePicker`（强制 24 小时制），
+  顶部「恢复默认」、底部「保存」；保存前用 `firstInvalidSection()` 校验
+  「结束必须晚于开始」。页面编辑的是**草稿**，点保存才写回，改到一半返回不会弄乱作息。
+* 所有读取点已从 `defaultPeriods` 换成 `activePeriods`：`lib/widgets/timetable_grid.dart`
+  （5 处）、`lib/pages/course_edit_page.dart:250,270`、`lib/services/reminder_service.dart:388`。
+* 顺带引入 `flutter_localizations`（`MaterialApp` 的
+  `localizationsDelegates: GlobalMaterialLocalizations.delegates` +
+  `supportedLocales: [zh_CN, en]`），否则 `showTimePicker` / `showDatePicker`
+  的按钮是英文的 CANCEL / OK。
+
+**本轮验证**：`flutter analyze` → No issues found；`flutter test` → **106 个用例全绿**
+（新增 `test/period_settings_test.dart` 19 个：编解码 / 补齐与夹取 / 存取往返 /
+坏数据回落 / `AppState` 读回与重置 / 设置页入口与时间选择器）。
+
+> 真机取证（原子通知侧，本轮意外收获）：用户这次**点了**「立即验证 → 下节课预告」，
+> 日志拿到 App 侧最关键的一条证据 ——
+>
+> ```
+> 13:04:53.255 NjtcVivo: 已挂载 superx 字段：scene=METTING template=1 rightTemplate=6
+>                        keepDuration=1800s islandShowTime=180s
+> 13:04:53.262 NjtcNotify: 已发送[vivo 原子通知 + 原子岛] id=9901 「高等数学Ⅰ（上）」10:45 下课
+>                        | 下节课：大学物理V（上） · 10:55 · 明德楼B105
+> ```
+>
+> ⇒ 真机上**确实走的是原子通知分支、superx 挂载成功**（场景值仍是默认 `METTING`，
+> 未准入）。同批 `id=9902 … 明德楼A103 · 曾玉祥` 说明**当前课表里地点与教师都在**。
+
+---
+
+## 9.9 借用参考实现的导入系统 + 门户入口改公网地址（v1.1.5）
+
+这一轮是用户直接点名的：「我之前不是发了几个参考吗？你试着借用他们的导入系统」。
+参考材料都在本机，先把「哪个能借」判清楚了再动手。
+
+### 9.9.1 三个参考里，只有一个能借
+
+| 目录 | 是什么 | 能不能借 |
+| --- | --- | --- |
+| `D:\DSH\_research_cs\` | 完整 Kotlin 源码（`com.courseschedule`），导入系统齐全 | **能借**，本轮主要来源 |
+| `D:\DSH\_wk_tmp\x\WakeupSchedule_Kotlin-master\` | WakeUp 开放版源码 | 借不了：只有旧版苏大 `xskb_list.do` 一条路子（`ImportViewModel.kt:390` 用 `getElementById("kbtable")` + `getElementsByClass("kbcontent")`），**没有多校适配器系统** |
+| `D:\DSH\CourseTable\`（uni-app）、`D:\DSH\cakeni_CourseSchedule_技术情报报告.md` | 情报/前端 | 仅作参考，无 Java/JS 取数实现 |
+
+**另一个关键收获来自 WakeUp 的在线目录快照**
+（`D:\DSH\_research_CourseSchedule\analysis\wakeup-schedule-sync-20260928\sync-result.json`，
+`source: "WakeUp Schedule online directory v54, local snapshot"`）。里面**内江师范学院**这一条是：
+
+```json
+{ "school": "内江师范学院",
+  "old_url": "https://tpass.njtc.edu.cn/frontend/center_portal_njtc/home/index.html",
+  "new_url": "https://tpass.njtc.edu.cn/frontend/center_portal_njtc/home/index.html#/home/index",
+  "source_type": "zf", "adapter_id": "zhengfang_auto", "has_fragment": true }
+```
+
+两点结论：**①校内那套门户在公网主机 `tpass.njtc.edu.cn` 上也能开**（`pass.njtc.edu.cn`
+才是只在校园网解析的那个，见 9.7）；**②这所学校是正方系，走 `zhengfang_auto` 自动适配**。
+第 ① 点直接决定了下面的门户地址改动。
+
+### 9.9.2 从参考实现借了什么（`WebImportActivity.kt`）
+
+参考实现的正方适配器表（`_research_cs\app\src\main\java\com\courseschedule\ui\importdata\AcademicAdapterRegistry.kt:66-84`）：
+
+```
+ZHENGFANG_AUTO   selectors = #Table1, #kbgrid_table, #table1, #sycjlrtabGrid
+                 globals   = veInitDefaultJson, __INITIAL_STATE__
+                 requestPathPrefixes = /kbcx/xskbcx_cxXskbcxIndex.html   captureMode = PAGE_FETCH
+ZHENGFANG_LEGACY selectors = #Table1, #table1                            （DOM 方式）
+ZHENGFANG_JWGLXT selectors = #kbgrid_table, #sycjlrtabGrid + 同上 globals （PAGE_FETCH）
+```
+
+而 `#kbtable` / `.kbcontent`（我们原来认的那两个）其实是**强智**（`QIANGZHI_*`）的 id ——
+正方要用上面那四个之一。于是在 `WebImportActivity.kt` 里：
+
+1. **`PROBE_JS` 的识别集合扩大**，并加了「页面上的全局变量也算数」：
+   ```js
+   var IDS = '#kbtable,.kbcontent,#Table1,#kbgrid_table,#table1,#sycjlrtabGrid';
+   // 命中条件之一：veInitDefaultJson / kbxx / __INITIAL_STATE__ / dateList
+   // 存在，且其 JSON 里出现 kcmc|kcm|kbList|xqj|skxq
+   // 命中条件之二：整页就是 JSON（body 以 [ 或 { 开头且含课表键）
+   ```
+2. **新增 `DIAG_JS`：抓不到时先回答「这是哪种页面」。** 只读结构、不碰账号与 cookie：
+   标题、正文长度、「星期X」出现次数、若干全局变量的名字与长度、页面上所有
+   `select` 的 `id=value[label]`、所有 `table` 的 `#id或.class:行数`。
+   `probePage()` 里**只在 `hit == false` 时**执行并打一行 `page diag=…`。
+   真机上 WebView 截屏全黑（见 9.7 末），这一行日志是唯一能看出页面长什么样的东西。
+3. **`EXTRACT_JS` 照搬参考实现的取数顺序**（`AcademicCaptureScript.kt` 的思路）：
+   * 取数候选：内联全局（`veInitDefaultJson` / `__INITIAL_STATE__` / `kbxx` /
+     `kckbData` / `lessonArray` / `__NEXT_DATA__` / `dateList`）→ 整页 JSON →
+     `win.table0` → 最后才是传统 DOM。
+   * `deepFindRows(root)`：深度 ≤6、节点 ≤5000、每个数组抽样 ≤300 行取平均分，
+     **平均分 ≥7 才算课表数组**，取分数最高的那个。
+   * `deepAnyKey(o, ks, depth)`：**深度 2 下钻**对象与数组。正方新版把星期/节次/周次
+     塞进 `id.skxq` 这类子对象里，只看顶层键会漏。
+   * `slimRows(rows)`：键投影 + **把嵌套对象的原始值抬到顶层**
+     （`{id:{skxq:'1',jcs:'1-2'}}` → `skxq='1', jcs='1-2'`），因为 Dart 侧只认平铺键。
+   * `termCodes()`：先读 `#xnm` / `#xqm`，读不到就遍历所有 `select` 找
+     `id/name` 含 `xnxq|xnm|xqm|term|semester` 的，从 label/value 提 `20\d{2}` 年份，
+     尾数按正方惯例 `1→3`、`2→12` 映射。
+4. **DOM 打分的兜底也认正方 id**：`/^(Table1|table1|kbgrid_table|sycjlrtabGrid)$/`
+   命中加 800000 分（原来的 `#kbtable` / `.kbcontent` 分支保留）。
+
+### 9.9.3 为什么又写了一个 Node 守卫（`D:\DSH\verify_webimport_js.mjs`）
+
+`EXTRACT_JS` 现在是一段近 2 万字符的字符串常量，**`flutter analyze` 与 `flutter test`
+都覆盖不到它**，而它只在真机页面上才跑得起来。所以写了个**在项目外**的 Node 脚本
+（不进源码 zip、不进 APK）：从 Kotlin 里**当场抽出** `PROBE_JS` / `DIAG_JS` / `EXTRACT_JS`
+（按 `private val NAME = """` … `""".trimIndent()` 截取），先 `new Function(js)` 做语法检查，
+再把 `var ROW_NAMES` 到 `function borrowedHit` 之间的函数体抽出来，配一套**假的
+`window` / `document`**，用真形状的数据喂进去跑。**它当场抓出两个真 bug**：
+
+* `rowScore(嵌套行) = 6` → `deepFindRows` 返回 `null`：分数不够 7，整张课表被丢掉。
+  → 加 `deepAnyKey`，并给 `deepFindRows` 补一条 `named > 0`（数组里必须真有课名），
+  否则「只有节次+周次」的数组会以 5 分混进来。
+* `slimRows` 把嵌套对象拼成字符串挂在父键下（`o.id = 'skxq=1,jcs=1-2'`），
+  Dart 侧永远读不到。→ 改成抬到顶层，并额外遍历「这一行自己的键」（不只白名单键）。
+  行数上限同时从 2000 收到 **800**（真机整页 JSON 可能就是几万行）。
+
+修完 **pass=24 fail=0**，`EXTRACT_JS` 19834 字符语法 OK。
+
+### 9.9.4 门户入口改公网地址 + 修掉一个子串误判
+
+**背景**：1.1.4 已经把默认入口从校园网域名改回 CAS 深链（9.7），但用户看到的仍是
+「先登录、再自己找课表」。既然公网主机上也有门户（9.9.1 第 ① 点），就让默认入口
+直接落在门户上。实测三条：
+
+```
+https://tpass.njtc.edu.cn/frontend/center_portal_njtc/home/index.html  → 200，正文仅 176 字节
+    （内容是 <meta http-equiv="refresh" content="0;url=https://tpass.njtc.edu.cn/app.php/portal_v4">）
+https://tpass.njtc.edu.cn/app.php/portal_v4  → 200 → 跳 /auth/oauth/authorize?…
+    redirect_uri=…/app.php/portal_v4/ ，标题「统一身份认证中心」（22.8KB）
+https://pass.njtc.edu.cn/…  → 解析失败（ENOTFOUND）
+```
+
+于是：`PORTAL_URL = "https://tpass.njtc.edu.cn/app.php/portal_v4"`（`DEFAULT_URL` 就是它），
+`PORTAL_CAMPUS_URL` 保留作记录，菜单项「融合门户首页（需校园网）」改名「融合门户首页」。
+
+**顺手修掉 1.1.4 的一个真 bug**：回退判定原来写的是
+`failed.contains(PORTAL_HOST)`，而 `"tpass.njtc.edu.cn"` **正好以 `"pass.njtc.edu.cn"` 结尾**，
+把 CAS 登录页误判成门户 ⇒ CAS 侧每次网络错误（回退时那种 `ERR_CACHE_MISS` 很常见）
+都会触发一次原地重载 + 一条误导性 Toast。改成 `isPortalUrl()`：
+
+```kotlin
+private fun isPortalUrl(u: String?): Boolean {
+    val uri = android.net.Uri.parse(u ?: return false)
+    if (!uri.host.equals(PORTAL_HOST, ignoreCase = true)) return false
+    val path = uri.path ?: return false
+    return path.contains("portal_v4") || path.contains("center_portal_njtc")
+}
+```
+
+**同一个坑我自己又踩了一次**：`D:\DSH\verify_default_entry.mjs` 第一版用
+`!defaultUrl.includes(campusHost)` 断言，直接 FAIL —— 因为
+`"https://tpass.njtc.edu.cn/app.php/portal_v4"` 里也含 `"pass.njtc.edu.cn"`。
+**教训：主机名要比相等，不能比子串。**（守卫脚本现在先**剥掉注释**再检查
+「源码里有没有 `contains(PORTAL_HOST)`」，因为注释里正举着这个反例。）
+
+### 9.9.5 本轮验证
+
+* `D:\DSH\verify_webimport_js.mjs` → **ALL PASS（pass=24 fail=0）**。
+* `D:\DSH\verify_default_entry.mjs` → **ALL PASS（11 条断言）**，其中一条会**真发一次 HTTP**：
+  `默认入口公网真能打开（HTTP 200）—— title=[统一身份认证中心] len=22382
+  final=…/auth/oauth/authorize?…redirect_uri=…%2Fapp.php%2Fportal_v4%2F`；
+  另有 DNS 解析、主机名相等、CAS 深链带 `service=` 等。
+* `flutter analyze` → No issues found；`flutter test` → **106 个用例全绿**。
+* Dart 侧文案同步：`lib/services/jwxt_service.dart`（`portalUrl` / `campusPortalUrl` 注释）、
+  `lib/pages/import_page.dart` 四步说明改成「打开内师融合门户（先跳统一身份认证）→
+  登录 → 在门户里自己点进课表查询 → 点右上角『读取课表 ✓』」。
+
+### 9.9.6 本轮踩的坑
+
+* **改字符串字面量时把行尾的 `,` 写成了 `;`**：`lib/pages/import_page.dart:208` 的
+  `Text(...)` 参数列表被提前终止，报 `Expected to find ')' - import_page.dart:208:56`，
+  release 构建直接失败（`flutter analyze` **能**查出来，所以先跑 analyze 就不会浪费一次构建）。
+* 文案里的 Markdown 星号（`**自己点进**`）在 `Text` 里会**原样显示**，
+  写完顺手去掉 —— 这个项目没有 Markdown 渲染。
+* 版本：`pubspec.yaml` `1.1.5+7`，`settings_page.dart` 关于页 `v1.1.5`。
+
+---
+
+## 9.10 v1.1.6 —— 修掉「进得去页面但读取不到」+ 桌面小组件
+
+### 9.10.1 现象与定位：一次同步 XHR 把 WebView 的 JS 线程卡死了
+
+用户原话：**「现在能进页面，但是读取不到」**。真机日志只有三行，然后什么都没有：
+
+```
+14:03:46.001 onPageFinished url=…/kbcx/xskbcx_cxXskbcxIndex.html?gnmkdm=N2151&layout=default title=个人课表查询
+14:03:46.014 probe raw="true" hit=true       ← 新写的正方识别已经命中（页面认得出来）
+14:03:51.071 extract start url=…             ← 用户点了右上角「读取课表」
+（NjtcImport 这个标签整场一行都没打）
+```
+
+⇒ `webView.evaluateJavascript(EXTRACT_JS, cb)` 的**回调根本没回来**，不是「抓到了空数据」。
+
+根因在旧的 `tryJwglxtJson()` 里，有一处**同步 XHR**：
+
+```js
+xhr.open('POST', endpoint + '?doType=query&gnmkdm=N2151', false)   // ← false = 同步
+```
+
+同步 XHR **不能设超时、也不能中断**；只要请求挂住，WebView 的 JS 线程就永久阻塞，
+连 `evaluateJavascript` 的结果都送不回来。全文件扫过一遍：**没有 `while` 循环**，
+这是唯一的阻塞点。（另有一处隐患一并加固：`WebChromeClient` 只覆写了 `onProgressChanged`，
+`onJsAlert/onJsConfirm` 走默认实现会弹系统框并阻塞 JS。）
+
+顺带发现两个逻辑错：①那个 POST 发到了**页面地址** `xskbcx_cxXskbcxIndex.html`，
+而正方 jwglxt 的数据接口是 `xskbcx_cxXsKb.html`（返回 `{"kbList":[…]}`）；
+②正方课表是 **div 网格 `.kbcontent`**，不是 `<table>`，所以按 `tables.length` 找表永远找不到。
+
+### 9.10.2 改法：三阶段抓取 + 看门狗，且**一处同步请求都不留**
+
+`android/app/src/main/kotlin/cn/edu/njtc/njtc_schedule/webimport/WebImportActivity.kt`：
+
+* **删掉** `tryJwglxtJson()` / `queryJwglxtJson()`（同步 XHR 就在里面）。
+* 新增 `jsonEndpoints()`：**只算不发** —— 把 `endpointCandidates()` 的结果里
+  `_cxXskbcxIndex.html` 换成 `_cxXsKb.html` 排前面，原页面地址兜底，去重。
+* `extract()` 重写成三阶段，每阶段都有 token 作废机制（`extractToken` / `extractPhase`）：
+  * **pass 0**：直接抓当前 DOM（借来的 `EXTRACT_JS` 内联数据 → 整页 JSON → 同源 iframe → DOM 打分）；
+  * **pass 1**：没课 → 先 `evaluateJavascript(TRIGGER_QUERY_JS)` 点一下页面上的「查询」，
+    等 `QUERY_SETTLE_MS = 1800ms` 再抓一遍 DOM；
+  * **pass 2**：还没课 → `postForKbList()` 在 **Kotlin 侧**用 `HttpURLConnection`
+    POST 真正的数据接口（`NET_TIMEOUT_MS = 8000`，body 带 `xnm/xqm/kzlx/queryModel.*`，
+    `Cookie` 从 `CookieManager.getInstance().getCookie(referer)` 取 —— 登录态是 WebView 建立的）。
+  * **看门狗** `EXTRACT_TIMEOUT_MS = 20000`：无论如何都会恢复「读取课表」按钮并提示卡在哪一阶段。
+* 新增 `hasRows()` 判空（`jsonRows` 非空 / `kbFilled>0` / `tableHtml` 含 `kbcontent` 且够长 / 正文够长），
+  payload 增加 `endpoints`、`kbFilled`、`diag`（`tables/frames/bodyLen/bestId/bestScore/xnm/xqm`）。
+* 新增 `TRIGGER_QUERY_JS`：先找 `window.query/search/doQuery/loadData/reloadData/refresh`，
+  找不到就找文本是「查询/搜索/查课表」的 `button/a/input` 点一下。
+
+**Dart 侧不用改**：`lib/services/jwxt_service.dart:212-220` 早就在读 `payload['jsonRows']`
+并走 `ZfHtmlParser.coursesFromJwglxtJson()`。
+
+### 9.10.3 守卫脚本跟着升级（`D:\DSH\verify_webimport_js.mjs`）
+
+除了原有 24 条，新增三组断言，从 **pass=23 fail=1 修到 ALL PASS（pass=44 fail=0）**：
+
+1. **不许再出现会卡死的写法**：`EXTRACT_JS` 里不得有 `xhr.open(…, false)`、不得有 `while (`；
+   整个 Kotlin 源码里不得再出现 `tryJwglxtJson` / `queryJwglxtJson`。
+2. `TRIGGER_QUERY_JS` 也要过 `new Function` 语法检查，且必须含查询函数名与「查询」字样。
+3. Kotlin 侧三阶段骨架必须在：`EXTRACT_TIMEOUT_MS`、`QUERY_SETTLE_MS`、`postForKbList`、
+   `CookieManager.getInstance().getCookie`、`doType=query&gnmkdm=N2151`、`NET_TIMEOUT_MS`、`runExtractPass`。
+
+### 9.10.4 桌面小组件「今日课程」
+
+参考 `D:\DSH\_refs\wakeup-schedule` 的 `widget\TodayWidget.kt`（`AppWidgetProvider` +
+`RemoteViewsService` + `RemoteViewsFactory`），但**故意不用列表**：一天最多五六门课，
+静态 5 行少一层 Service 生命周期，刷新时机完全自己控制，也更省电。
+
+* `android/app/src/main/kotlin/cn/edu/njtc/njtc_schedule/widget/WidgetData.kt`：
+  读原生存档 → 算出「今天要画哪几行」。今天星期几用 `((Calendar.DAY_OF_WEEK + 5) % 7) + 1`
+  （周一=1…周日=7）；周次算法与 Dart 的 `AppState._autoDetectWeek()` 一致
+  （`days/7 + 1` 再夹到 `[1, totalWeeks]`）；单双周、周次区间与 `Course.isActiveOnWeek()` 一致；
+  取色与 `AppTheme.colorForCourse()` 一致（码元求和 `% 8`）。**最多 5 行**，多的折成
+  「还有 N 门 · 点开看全部」。
+* `widget/TodayWidgetProvider.kt`：`onUpdate` + `onReceive` 处理自己发的
+  `cn.edu.njtc.njtc_schedule.WIDGET_REFRESH`、`DATE_CHANGED`、`TIME_SET`、`TIMEZONE_CHANGED`、
+  `BOOT_COMPLETED`、`MY_PACKAGE_REPLACED`（跨零点要换成新一天的课）。
+  用 `RemoteViews` + `setInt(bar, "setBackgroundColor", color)` 画左侧色条。
+* `widget/WidgetBridge.kt` + 通道 `cn.edu.njtc.njtc_schedule/widget`（`update` / `refresh`），
+  在 `MainActivity.configureFlutterEngine()` 里注册。`widget/NjtcWidgetStore.kt` 存
+  `timetable` / `periods` / `has_timetable` 三样。
+* 布局 `android/app/src/main/res/layout/widget_today.xml`（5 行写死）、底板
+  `res/drawable/widget_bg.xml`、元信息 `res/xml/widget_today_info.xml`
+  （`updatePeriodMillis=1800000`，30 分钟是系统最小值，主要靠主动刷新）。
+* `AndroidManifest.xml` 注册 `<receiver android:name=".widget.TodayWidgetProvider">` +
+  `<meta-data android:name="android.appwidget.provider">`。
+* Dart 侧 `lib/services/widget_service.dart`：`sync()` 把 `Timetable.toJsonString()` 与
+  节次表（精简成 `[{s,a,b}]`）推给原生；设置页新增「桌面小组件」入口
+  （`lib/pages/settings_page.dart` 的 `_WidgetEntry`），里面写清怎么把挂件拖到桌面，
+  还带一个「立即同步」按钮。
+
+**为什么让 Dart 主动推、而不是原生自己去读 `FlutterSharedPreferences`**：
+①`shared_preferences_android-2.4.28` 把 `setStringList` 存成
+`LIST_PREFIX + Base64(Java 序列化 ArrayList)`（`LIST_PREFIX = "VGhpcyBpcyB0aGUgcHJlZml4IGZvciBhIGxpc3Qu"`），
+原生要读得先 Base64 解码再 Java 反序列化，不值当；
+②Flutter 侧是**异步落盘**，刚 `setString()` 完就刷新时原生另开一个实例可能读到旧值。
+推过去存进原生自己的 `njtc_widget`，顺序就确定了。
+
+### 9.10.5 本轮踩的坑（很重要）
+
+* **别在保存路径上 `await` 一个没有桩的平台通道调用**。最初把
+  `await WidgetService.sync(...)` 放进 `AppState._syncAfterChange()`，结果
+  `test/course_edit_test.dart` 的第一个用例**卡死 10 分钟**：`pumpAndSettle()`
+  一遍遍空转到超时（每轮都要等那个永远不回来的平台消息）。改成
+  `unawaited(WidgetService.sync(...))`（`dart:async`）后，全量测试 4 秒跑完 112 个用例。
+  `WidgetService.sync()` 自己 try/catch 吞掉所有异常，所以不 await 也不会冒出未处理异常。
+* `test/` 里的 `select-Object -Last` 会**缓冲全部输出**，看起来像「没有任何输出」——
+  排查挂起要把输出重定向到文件再 tail。
+* 一个文件单独跑很快、全量跑挂住 ⇒ 说明挂的是**某个用例**，用
+  `Start-Process + 重定向日志 + 看 compact reporter 停在哪个用例名** 最快定位。
+
+### 9.10.6 本轮验证
+
+* `flutter analyze` → No issues found。
+* `flutter test` → **112 个用例全绿**（106 + 新增 `test/widget_service_test.dart` 6 个：
+  平台开关、推的 JSON 形状、自定义作息、没有课表时的 `hasTimetable=false`、原生抛错被吞、`refresh`）。
+* `.\gradlew.bat :app:compileDebugKotlin` → **BUILD SUCCESSFUL**（widget 四个 Kotlin 文件编译通过）。
+* 版本：`pubspec.yaml` `1.1.6+8`，`settings_page.dart` 关于页 `v1.1.6`。
+
+## 9.11 v1.1.7 —— `innerText` 兜底 + 把抓取脚本放到真 DOM 上验一遍
+
+### 9.11.1 又一个「读取不到」的嫌疑犯：`innerText` 对隐藏元素返回空串
+
+`innerText` 和 `textContent` 看着像同义词，其实差一条：**`innerText` 只返回「渲染出来」
+的文字**，元素被 CSS 隐藏（`display:none` / 折叠的页签）时它返回 `''`；`textContent`
+不管可见性，一律返回全部文本。
+
+正方系列页面恰恰**特别爱把课表塞进隐藏容器**：切页签的 tab、`display:none` 的结果区、
+折叠面板。这时候 `EXTRACT_JS` 里凡是用 `innerText` 判断「这页有没有课表」「这个格子有没有
+内容」的地方，都会得到「什么都没有」，于是安静地走进兜底分支 —— 用户看到的就是
+「读取不到」，而页面明明是好的。
+
+1.1.6 全文件排查后，`EXTRACT_JS` 里多数地方本来就写了 `innerText || textContent`，
+但有 **4 处漏了**（见下），本轮统一补齐：
+
+| 位置 | 原写法 | 影响 |
+| --- | --- | --- |
+| `PROBE_JS` 正文判定 | `document.body.innerText \|\| ''` | 隐藏课表页被判成「不是课表页」，直接不进抓取 |
+| `PROBE_JS` iframe 判定 | `d.body.innerText \|\| ''` | 同上 |
+| `DIAG_JS` 指纹 | `document.body.innerText \|\| ''` | 日志里 `days=0 bodyLen=0`，误导排查 |
+| `TRIGGER_QUERY_JS` 按钮文字 | `el.innerText \|\| el.value \|\| el.title` | 「查询」按钮认不出来，点不到查询 |
+
+`TRIGGER_QUERY_JS` 那处的兜底顺序是 `innerText || textContent || value || title`：
+`<input type=button value="查询">` 的 `textContent` 是空串，所以顺序不会把 `value` 挡掉
+（jsdom 里实测走的就是 `value` → `click:查询`）。
+
+### 9.11.2 更重要的：`EXTRACT_JS` 以前**从没在真 DOM 上跑过**
+
+回头看 1.1.5 → 1.1.6 的排查过程，有个尴尬的事实：抓取脚本只有两种「验证」——
+
+1. `new Function(code)` 语法检查；
+2. 把 `EXTRACT_JS` 里的一小段（`var ROW_NAMES` … `function borrowedHit`）抠出来，
+   喂给一个**手搓的假 DOM**（`D:\DSH\verify_webimport_js.mjs`）。
+
+也就是说 `collect` / `cells` / `filledCells` / `termCodes` / `jsonEndpoints` /
+表格打分这一大坨**从来没被执行过一次**。真机报「读取不到」时，分不清是脚本抠不到、
+接口没回、还是解析层吃不下 —— 只能靠猜。
+
+本轮补上：`D:\DSH\_verify\verify_extract_pipeline.mjs` 用 **jsdom 起真 DOM**，
+把 `EXTRACT_JS` 原文抽出来 `window.eval` 跑，**29 条断言 / 5 个场景**：
+
+* 场景 1 常规部署 `/jwglxt/kbcx/…`：选中 `#kbtable`（不是那张 `other-table`）、
+  `kbFilled=9`、正文有「星期X」和课名、`jsonRows=null`；
+  **端点推断**给出 `…/jwglxt/kbcx/xskbcx_cxXsKb.html` 打头（页面 `_cxXskbcxIndex.html`
+  → 数据 `_cxXsKb.html`），并额外给 `/kbcx/` 那一层（context-path 猜错时的第二条路）。
+* 场景 2 **反向代理**（内江师范真实形态）：`url=` 参数解两遍码后取出
+  `…/kbcx/xskbcx_cxXsKb.html` —— 老代码正是在这里 `return null`，
+  于是永远拿不到接口数据，教师/教室只能靠抠 DOM。
+* 场景 3 正方新版形状：表格外包一层 `<div id="kbtable">`（表格自己没有 id），
+  靠 `parentNode.id === 'kbtable'` 的加分仍选中它。
+* 场景 4 前面塞 3 张噪声表，课表仍要胜出（`tables=5`，`bestId=kbtable`）。
+* 场景 5 `TRIGGER_QUERY_JS`：有 `query()` 时 `call:query`；没有时退回点按钮
+  `click:查询`。
+
+脚本最后把场景 1 的载荷落盘成 `test/fixtures/extract_payload_jsdom.json`
+（**真 JS 在真 DOM 上的产物**），再由 `test/webimport_jsdom_payload_test.dart`
+（8 个用例）喂给 `JwxtService.parsePayload` 跑完下半段。
+
+**最有价值的那条断言**：载荷路径与「整页 HTML 直接解析」**逐门完全一致** ——
+9 门课，课名/星期/节次/周次/单双周/教师/教室/课号/教学班全等，
+连学期（2026-2027年第1学期）、专业（机器人工程）、总周数（20）都一样。
+载荷里的 `tableHtml` 只有 **2921 字节**（整页 4637 字节），
+丢掉了 `#head`、`other-table` 和 HTML 外壳；学期/专业能活下来，
+靠的是同一份载荷里的 `payload['text']`（整页正文）。
+**这两半缺一不可** —— 以后谁要「优化载荷体积」，先把这条测试跑一遍。
+
+### 9.11.3 本轮踩的坑
+
+* **断言不要数字符串出现次数**：夹具里 `kbcontent` 出现 10 次，但 `<div class="kbcontent">`
+  只有 **9 个**（第 10 次在文件顶部的注释里）。要断言就 `querySelectorAll('.kbcontent').length`。
+* **jsdom 没有实现 `innerText`**（返回 `undefined`）。这反而成了好事：
+  它顺带证明了 `innerText || textContent` 这层兜底不是装饰 —— 少了它，
+  正文判定、课程格文本、按钮文字全是空串。
+* `runScripts: 'outside-only'` 时**页面内联 `<script>` 不执行**，
+  所以场景 5 里 `window.query` 不存在，走的正是「退回点按钮」那条路；
+  要测函数优先，得从外面 `w.eval('window.query = …')` 注入。
+* Dart 里 `'$fixturePath'` 不会插值（单引号里 `$` 后面跟的是未定义的标识符名，
+  编译期直接报 `Undefined name`）—— 常量要写 `$_fixturePath`。
+
+### 9.11.4 本轮验证
+
+* `flutter analyze` → No issues found。
+* `flutter test` → **120 个用例全绿**（112 + `test/webimport_jsdom_payload_test.dart` 8 个）。
+* `node D:\DSH\verify_webimport_js.mjs` → **ALL PASS 44 条**（老的片段级守卫没被打破）。
+* `node D:\DSH\_verify\verify_extract_pipeline.mjs` → **ALL PASS 29 条**。
+* 版本：`pubspec.yaml` `1.1.7+9`，`settings_page.dart` 关于页 `v1.1.7`。
+* 改了 `EXTRACT_JS` 就要重跑一次 jsdom 脚本，否则 fixture 会过期：
+  `node D:\DSH\_verify\verify_extract_pipeline.mjs`
+  （jsdom 装在 `D:\DSH\_verify`，不进 App 仓库、不进源码 zip）。
+
+## 9.12 v1.1.8 —— 接口路径曾经是死代码（模拟器 E2E 抓出来的真 bug）
+
+### 9.12.1 现象
+
+`integration_test/jwglxt_json_e2e_test.dart` 在 1.1.7 上**失败**：
+
+```
+NjtcImport: 载荷 表格HTML=417 文本=87 jsonRows=0 课程格=1 页面标题=学生课表
+            接口端点=http://10.0.2.2:8138/jwglxt/kbcx/xskbcx_cxXsKb.html
+            诊断={tables: 1, frames: 0, bodyLen: 87, bestId: kbtable, bestScore: 1000034, xnm: 2026, xqm: 3}
+NjtcImport: 解析来源=… 课程=0
+```
+
+注意三件事：`接口端点` **已经算出来了**、`xnm/xqm` **也有值**（2026 / 3），
+可 `jsonRows=0`，而且 logcat 里**只有 `extract pass=0` 一行**，接着就
+`finishWithPayload` —— pass 1 / pass 2 根本没跑。
+
+### 9.12.2 根因：`hasRows()` 一真，接口阶段就永远进不去
+
+1.1.6 引入的三阶段 `extract()` 里，pass 0 写的是：
+
+```kotlin
+if (hasRows(payload)) { settleOk(payload); return }
+```
+
+而 `hasRows()` 的判据是 `kbFilled > 0` —— **DOM 里抠到任意一格就算「读到了」**。
+`tool/jwglxt_fixture_server.py` 的页面故意只画**一个** `.kbcontent`（人工智能导论），
+接口却返回 4 行 `kbList`（拆成 6 门课）。这正是正方真实页面的形态：
+**页面只渲染一屏 / 当前周，接口给的才是整学期**。
+
+于是：DOM 有一格 → pass 0 直接 `settleOk` → pass 2 的 `postForKbList()` 永远不执行。
+`jsonEndpoints()` 算出来的接口地址、`xnm/xqm` 全都白算了。
+用户看到的是「导入成功，但只有一屏的课」，比彻底失败更难被发现。
+
+### 9.12.3 改法
+
+`android/app/src/main/kotlin/cn/edu/njtc/njtc_schedule/webimport/WebImportActivity.kt`：
+
+* 新增 `private fun canQueryInterface(p: JSONObject): Boolean` ——
+  `endpoints` 数组非空 **且** `xnm`/`xqm` 都不为空才认为「这个页面值得再打一次接口」。
+* 新增 `private fun startNetPhase(token: Int, payload: JSONObject, fallback: JSONObject?)`
+  —— 把「取 endpoints / xnm / xqm → 进 net 阶段 → `postForKbList`」抽出来；
+  地址或学年学期不全时，有 `fallback` 就用它 `settleOk`，没有才 `settleFail`。
+* pass 0 分支改成：
+
+```kotlin
+if (hasRows(payload)) {
+    // ⚠️ 别再改回「有 DOM 就直接 settleOk」：那样接口路径变成死代码，
+    // 页面只画一屏时用户就只拿到一屏的课（1.1.6 / 1.1.7 的真 bug）。
+    if (pass == 0 && canQueryInterface(payload)) {
+        startNetPhase(token, payload, fallback = payload)
+        return
+    }
+    settleOk(payload)
+    return
+}
+```
+
+  pass 1 末尾则改成 `startNetPhase(token, payload, fallback = null)`（老链路不变）。
+* `postForKbList(token, endpoints, xnm, xqm, base, fallback)` 增加 `fallback` 形参，
+  并给候选地址排序 + 限流：
+
+```kotlin
+val (dataish, others) = endpoints.partition { DATA_ENDPOINT_RE.containsMatchIn(it) }
+val tries = (dataish + others).take(MAX_NET_TRIES)
+```
+
+  全部试完还是没 `kbList` 时，`fallback != null && hasRows(fallback)` 就
+  `Log.i(TAG, "接口没返回课表（$lastErr），回落到页面 DOM")` + `settleOk(fallback)`。
+* companion object 新增两个常量：`MAX_NET_TRIES = 2`（最坏 2 × `NET_TIMEOUT_MS`
+  8000ms = 16s，压在 `EXTRACT_TIMEOUT_MS` 20s 看门狗之内 —— `jsonEndpoints()`
+  会把页面地址也当候选塞进来，POST 页面地址只会拿回 HTML，所以必须限条数）、
+  `DATA_ENDPOINT_RE = Regex("cxXsKb|cxXsgrkb", RegexOption.IGNORE_CASE)`。
+
+**为什么一定要回落 DOM**：接口地址可能是猜的（反向代理的 context-path 不一定对），
+用户宁可拿到「只有一屏的课表」也不要拿到「导入失败」。
+
+### 9.12.4 守卫升级
+
+`D:\DSH\verify_webimport_js.mjs` 从 44 条加到 **54 条**，新增：
+
+* 六个 Kotlin 骨架 needle（`canQueryInterface` / `startNetPhase` / `MAX_NET_TRIES` /
+  `DATA_ENDPOINT_RE` / `回落到页面 DOM`）；
+* **顺序敏感**的一条：`canQueryInterface(payload)` 在源码里的下标必须
+  **大于** `if (hasRows(payload)) {` 的下标、且间距 < 1600 字符 ——
+  这正是 1.1.6/1.1.7 出 bug 的那个位置，钉住它就不会再被改回去；
+* `startNetPhase(token, payload, fallback = payload)` 与 `… fallback = null)`
+  两种调用形态都在，防止有人把「有 DOM 课」那条路又接回老的 pass 1/2 链路。
+
+### 9.12.5 验证
+
+* `flutter analyze` → No issues found。
+* `flutter test` → **120 个用例全绿**。
+* `node D:\DSH\verify_webimport_js.mjs` → **ALL PASS 54 条**。
+* `integration_test/jwglxt_json_e2e_test.dart`（模拟器 emulator-5554）→ **通过**：
+  `jsonRows=4`、`接口端点=…/jwglxt/kbcx/xskbcx_cxXsKb.html`、
+  `解析来源=教务接口 jsonRows 课程=6 有教师=6 有地点=6`、
+  `message=已从教务接口识别 6 门课`、学期 2026-2027年第1学期 / 周数 18；
+  `大学物理V（上）` 单双周=1；`思想道德与法治` 离散周次拆成 `1-1`/`3-3`/`5-9` 三段。
+* `integration_test/web_import_e2e_test.dart`（DOM 路径回归）→ **通过**：
+  `已识别 9 门课`、学期 / 专业 / 周数 20 / 起始 2026-08-31 全对
+  （该页 `xnm`/`xqm` 为空 ⇒ `canQueryInterface` 为 false ⇒ 仍走 DOM，符合预期）。
+* 版本：`pubspec.yaml` `1.1.8+10`，`settings_page.dart` 关于页 `v1.1.8`。
+
+### 9.12.6 教训
+
+* **「测试没改、产品改了」也算回归**：`jwglxt_json_e2e_test.dart` 和夹具一直没动，
+  但 1.1.6 的三阶段重构把它的目标路径变成了死代码。有 E2E 才看得见。
+* **分支里最有价值的那条路，要单独问一句「它真的会走到吗」**：
+  `hasRows()` 提前 `return` 这种写法，静态看是「能跑就不折腾」，实际是让整段代码失效。
+* 别只写「XXX 存在」的断言 —— 顺序 / 位置也是逻辑，`indexOf` 的大小比较就能守住它。
+
+---
+
+## 9.13 v1.1.8 补测 —— 反向代理形态（内江师范真实地址）首次在真机上跑通
+
+### 9.13.1 为什么还要加这条
+
+前两条 E2E 覆盖的是「抠渲染后的 DOM」和「常规部署 `/jwglxt/kbcx/xskbcx_cxXskbcxIndex.html`」。
+可学校实际给学生的地址是**反向代理**形态：
+
+```
+https://jxglpt-xxx.proxy.njtc.edu.cn/sso/driotlogin?url=kbcx%252Fxskbcx_cxXskbcxIndex.html%253Fgnmkdm%253DN2151
+```
+
+路径里**根本没有 `/kbcx/` 这一段**，真地址藏在 `url=` 参数里、而且是**双层**百分号编码
+（`%252F` 解一遍是 `%2F`，解两遍才是 `/`）。1.1.5 之前的老代码就是在这里直接 `return null`，
+于是永远拿不到接口数据、只能退化成抠 DOM —— 教师 / 地点整列都丢。
+
+1.1.7 起 `endpointCandidates()` 会解两遍码把端点拼出来，但**只在 jsdom 里验过**推导逻辑，
+真 WebView 上一次都没跑过。这条补的就是这个缺口。
+
+### 9.13.2 固件服务扩了两个「代理落地方式」
+
+`tool/jwglxt_fixture_server.py` 新增：
+
+| 路径 | 形态 |
+| --- | --- |
+| `GET /sso/driotlogin?url=…` | 登录接口**原地**吐课表页，`url=` 参数还在 → 走「解两遍码」分支 |
+| `GET /sso/driotlogin_r` | 302 跳到 `/kbcx/xskbcx_cxXskbcxIndex.html` → 跳完参数没了，只能靠 `location.pathname` 推 |
+
+两种落地方式都必须推出**同一个**数据接口 `/kbcx/xskbcx_cxXsKb.html`。
+另外加了两个只给测试用的观察口：`GET /__posts`（按顺序返回服务端收到的 POST 路径）、
+`GET /__reset`（清空）。**这是这条测试最硬的一条断言** —— 它证明 App 打的确实是
+「推导出来的数据接口」，而不是像老代码那样把 POST 发到页面地址上。
+
+### 9.13.3 新测试 `integration_test/jwglxt_proxy_e2e_test.dart`
+
+两个用例（原地吐页面 / 302 跳转），断言：`message` 含 `教务接口`（没退化成抠 DOM）、
+服务端收到的**第一个** POST 就是 `/kbcx/xskbcx_cxXsKb.html`、6 门课、学期
+`2026-2027年第1学期`、周数 18、`大学物理V（上）` 单双周=1、`思想道德与法治` 离散周次
+逐段保留 `1-1` / `3-3` / `5-9`。
+
+固件地址做成可覆盖的，模拟器和真机同一份测试：
+
+```bash
+# 模拟器（默认值，宿主机的 127.0.0.1 就是 10.0.2.2）
+flutter test integration_test/jwglxt_proxy_e2e_test.dart -d emulator-5554
+
+# 真机：先把手机的 8138 反投到宿主机，再覆盖固件地址
+adb reverse tcp:8138 tcp:8138
+flutter test integration_test/jwglxt_proxy_e2e_test.dart -d <serial> \
+  --dart-define=FIXTURE_HOST=http://127.0.0.1:8138
+```
+
+### 9.13.4 真机（vivo V2520A / Android 17）实测结果
+
+`+2: All tests passed!`（EXIT=0）。两种形态的日志：
+
+```
+# 形态一：url= 参数还在
+NjtcImport: 载荷 表格HTML=417 文本=87 jsonRows=4 课程格=1 页面标题=学生课表
+            接口端点=http://127.0.0.1:8138/kbcx/xskbcx_cxXsKb.html
+            诊断={tables: 1, frames: 0, bodyLen: 87, bestId: kbtable, bestScore: 1000034, xnm: 2026, xqm: 3}
+NjtcImport: 解析来源=教务接口 jsonRows 课程=6 有教师=6 有地点=6
+[E2E-PROXY] pageUrl=http://127.0.0.1:8138/sso/driotlogin?url=kbcx%252F…  title=学生课表
+[E2E-PROXY] 固件服务收到的 POST 路径=[/kbcx/xskbcx_cxXsKb.html]
+
+# 形态二：302 之后参数丢了
+[E2E-PROXY] pageUrl=http://127.0.0.1:8138/kbcx/xskbcx_cxXskbcxIndex.html
+[E2E-PROXY] 固件服务收到的 POST 路径=[/kbcx/xskbcx_cxXsKb.html]
+```
+
+顺带把 1.1.8 release 包（`内师课程表-1.1.8-arm64-v8a.apk`）装进真机做了冷启动冒烟：
+`versionCode=2010 versionName=1.1.8`、无崩溃、小组件 provider 已注册，设备摘要为
+`{isVivo=true, isIslandCapable=true, romVersion=17.0, sceneEnabled=false, brand=vivo,
+manufacturer=vivo, model=V2520A, osVersion=17.0, androidSdk=37, androidRelease=17,
+notificationsEnabled=true, exactAlarmAllowed=true, ignoringBatteryOptimizations=false}`
+—— 真机上原子岛能力确实被判成 `true`（`sceneEnabled=false` 是因为 `COURSE` 场景还没拿到
+vivo 准入，仍走 `METTING`）。
+
+### 9.13.5 教训
+
+* **「推导逻辑在 jsdom 里过了」不等于「真 WebView 上能用」**：jsdom 没有真网络栈、没有
+  Cookie、没有 WebView 的地址栏行为，302 之后 `location` 变成什么它管不了。
+  凡是要跟真实浏览器行为对齐的，最后都得在设备上跑一遍。
+* **断言要打在「服务端看到了什么」上**，而不是只看 Dart 侧的结果：`/__posts` 这一条
+  才真正区分出「打的是数据接口」和「打的是页面地址」（后者也能返回 200，只是 body 是 HTML）。
+* 真机跑 `integration_test` 要 `adb reverse` + `--dart-define`；而且**跑完 App 会被卸载**
+  （`flutter test integration_test` 的行为），所以跑完要记得把 release 包装回去。
+

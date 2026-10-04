@@ -1,0 +1,41 @@
+name: njtc_schedule
+description: 内江师范学院课程表 - 美观的课程表应用，支持教务系统导入
+publish_to: 'none'
+version: 1.1.8+10
+
+environment:
+  sdk: '>=3.6.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # 日期/时间选择器的中文文案（否则 showDatePicker / showTimePicker 是英文的
+  # CANCEL / OK）。属于 Flutter SDK 自带包，不引入第三方依赖。
+  flutter_localizations:
+    sdk: flutter
+  # 状态管理
+  provider: ^6.1.2
+  # 本地持久化（课表数据、当前课表、学期起始日期）
+  shared_preferences: ^2.2.3
+  # Excel 解析（.xlsx 走本包；老式 .xls 由 lib/services/xls_reader.dart 自研解析）
+  excel: ^4.0.6
+  # 平台文件选择
+  # 注意：8.x/9.x 的 android/build.gradle 硬编码 compileSdk 34，会与
+  # flutter_plugin_android_lifecycle(要求 36) 冲突导致 AAR metadata 校验失败；
+  # 10.3.10 起改为 compileSdk flutter.compileSdkVersion，请勿降级。
+  file_picker: ^10.3.10
+  # HTTP 请求（教务系统抓取）
+  http: ^1.2.1
+  # 图标字体
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # 真机/模拟器上的端到端验证（课表 → 原生排闹钟 → 通知）
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

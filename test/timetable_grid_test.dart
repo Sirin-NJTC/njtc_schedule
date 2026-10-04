@@ -1,0 +1,205 @@
+/// `TimetableGrid` 的新版布局行为测试（合成数据，不依赖固件文件）。
+///
+/// 这些用例锁定的是这一轮重写修掉的几个问题：
+/// * 同一格里的**冲突课**必须并排显示，不能互相覆盖（旧版 `grid[day][s] = course` 会丢课）；
+/// * 节次总数自适应，第 11 节不能因为写死 `maxSection = 10` 而消失；
+/// * 单/双周课程要有角标；
+/// * 展示的正好是本周时，今天那一列的表头显示「今天」；
+/// * 不在本周的课程不出现。
+library;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:njtc_schedule/models/course.dart';
+import 'package:njtc_schedule/models/timetable.dart';
+import 'package:njtc_schedule/theme.dart';
+import 'package:njtc_schedule/widgets/course_card.dart';
+import 'package:njtc_schedule/widgets/timetable_grid.dart';
+
+/// 构造一门课，只写关心的字段。
+Course c({
+  required String name,
+  int day = 1,
+  int start = 1,
+  int end = 1,
+  int startWeek = 1,
+  int endWeek = 20,
+  int oddEven = 0,
+  String teacher = '张老师',
+  String location = '明德楼A101',
+}) =>
+    Course(
+      name: name,
+      teacher: teacher,
+      location: location,
+      dayOfWeek: day,
+      startSection: start,
+      endSection: end,
+      startWeek: startWeek,
+      endWeek: endWeek,
+      oddEven: oddEven,
+    );
+
+Timetable tt(List<Course> courses, {DateTime? startDate, int totalWeeks = 20}) =>
+    Timetable(
+      id: 'test',
+      name: '测试课表',
+      totalWeeks: totalWeeks,
+      startDate: startDate,
+      courses: courses,
+    );
+
+Future<void> pumpGrid(WidgetTester tester, Timetable timetable, int week) async {
+  // 手机宽度：7 天网格放不下，正好验证横向滚动 + 自动滚动到今天不崩
+  tester.view.physicalSize = const Size(1200, 2000);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+
+  await tester.pumpWidget(MaterialApp(
+    theme: AppTheme.lightTheme,
+    home: Scaffold(
+      body: TimetableGrid(timetable: timetable, currentWeek: week),
+    ),
+  ));
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  group('冲突课程并排显示', () {
+    testWidgets('同一格两门课都画出来（旧版会互相覆盖丢一门）', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '冲突课甲', day: 3, start: 3, end: 4),
+          c(name: '冲突课乙', day: 3, start: 3, end: 4, teacher: '李老师'),
+        ]),
+        1,
+      );
+
+      expect(find.text('冲突课甲'), findsOneWidget);
+      expect(find.text('冲突课乙'), findsOneWidget);
+      expect(find.byType(CourseCard), findsNWidgets(2));
+    });
+
+    testWidgets('三门课在同一格也能全部显示', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '并排一', day: 2, start: 5, end: 6),
+          c(name: '并排二', day: 2, start: 5, end: 6),
+          c(name: '并排三', day: 2, start: 5, end: 6),
+        ]),
+        1,
+      );
+
+      for (final n in ['并排一', '并排二', '并排三']) {
+        expect(find.text(n), findsOneWidget, reason: '$n 应该被画出来');
+      }
+      expect(find.byType(CourseCard), findsNWidgets(3));
+    });
+
+    testWidgets('时间不重叠的两门课不会并排（顺序排布）', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '上午课', day: 4, start: 1, end: 2),
+          c(name: '下午课', day: 4, start: 5, end: 6),
+        ]),
+        1,
+      );
+
+      expect(find.byType(CourseCard), findsNWidgets(2));
+      // 两门课位置不同：y 坐标必须不一样
+      final a = tester.getTopLeft(find.text('上午课'));
+      final b = tester.getTopLeft(find.text('下午课'));
+      expect(a.dy, isNot(equals(b.dy)));
+    });
+  });
+
+  group('节次自适应', () {
+    testWidgets('第 11 节的课能显示，且节次轴画到第 11 节', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([c(name: '晚课', day: 5, start: 11, end: 11)]),
+        1,
+      );
+
+      expect(find.text('第11节'), findsOneWidget,
+          reason: '旧版写死 maxSection=10，第 11 节不存在');
+      expect(find.text('晚课'), findsOneWidget);
+    });
+
+    testWidgets('没有高节次课时只画标准 11 节', (tester) async {
+      await pumpGrid(tester, tt([c(name: '普通课', day: 1, start: 1, end: 2)]), 1);
+
+      expect(find.text('第1节'), findsOneWidget);
+      expect(find.text('第11节'), findsOneWidget);
+      expect(find.text('第12节'), findsNothing);
+    });
+  });
+
+  group('单双周与周次筛选', () {
+    testWidgets('单周课显示「单」角标，双周课显示「双」角标', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '单周课', day: 1, start: 1, end: 2, oddEven: 1),
+          c(name: '双周课', day: 2, start: 1, end: 2, oddEven: 2),
+        ]),
+        3, // 第 3 周：单周，两门都不受周次区间限制
+      );
+
+      expect(find.text('单'), findsOneWidget);
+      // 双周课在第 3 周不上课
+      expect(find.text('双周课'), findsNothing);
+      expect(find.text('单周课'), findsOneWidget);
+    });
+
+    testWidgets('不在本周的课程完全不出现（连角标都没有）', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([c(name: '短课', day: 1, start: 1, end: 2, startWeek: 5, endWeek: 8)]),
+        1,
+      );
+
+      expect(find.text('短课'), findsNothing);
+      expect(find.byType(CourseCard), findsNothing);
+    });
+  });
+
+  group('今天高亮', () {
+    testWidgets('展示本周时表头出现「今天」', (tester) async {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      // 让「今天」正好落在第 2 周：起始日 = 今天往前推 7 天
+      final startDate = today.subtract(const Duration(days: 7));
+
+      await pumpGrid(
+        tester,
+        tt(
+          [c(name: '今天的课', day: today.weekday, start: 1, end: 2)],
+          startDate: startDate,
+        ),
+        2,
+      );
+
+      expect(find.text('今天'), findsOneWidget);
+    });
+
+    testWidgets('展示的不是本周时没有「今天」，只有周一到周日', (tester) async {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final startDate = today.subtract(const Duration(days: 7));
+
+      // 当前其实是第 2 周，这里故意展示第 5 周
+      await pumpGrid(
+        tester,
+        tt([c(name: '某课', day: 1, start: 1, end: 2)], startDate: startDate),
+        5,
+      );
+
+      expect(find.text('今天'), findsNothing);
+      expect(find.text('周一'), findsOneWidget);
+    });
+  });
+}

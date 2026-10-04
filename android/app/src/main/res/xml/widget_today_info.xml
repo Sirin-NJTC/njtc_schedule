@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  小组件的元信息。
+  updatePeriodMillis 最小就是 30 分钟（再小系统会忽略），这里靠它兜底跨零点；
+  真正的即时刷新走 TodayWidgetProvider.ACTION_REFRESH（App 侧改完课表主动喊）。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/widget_today"
+    android:minHeight="110dp"
+    android:minWidth="250dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="4"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

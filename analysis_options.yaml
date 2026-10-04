@@ -1,0 +1,15 @@
+# Flutter 静态分析配置
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    prefer_const_constructors: true
+    avoid_print: true
+
+analyzer:
+  errors:
+    avoid_print: error
+  exclude:
+    - build/**
+    - android/**
+    - windows/**

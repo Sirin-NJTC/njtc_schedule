@@ -1,0 +1,72 @@
+<!--
+  内江师范学院（正方教务）学生课表页的结构样例，用于 zf_html_parser_test.dart。
+  结构要点与真实页面一致：
+  - 表头行含「星期X」，第一列是「节次」；
+  - 一个「大节」由两行 <tr> 组成，课程格 rowspan="2"，节次格也 rowspan="2"；
+  - 课程格内用 div.kbcontent 承载，字段靠 title 属性标注（教师 / 周次(节次) / 地点 / 教学班 / 教学班组成）；
+  - 同一格多门课用 <hr> 分隔；
+  - 周次写法是「周次在前、节次在后」，与导出的 .xls 相反。
+-->
+<html>
+<head><title>学生课表</title></head>
+<body>
+<div id="head">
+  2026-2027学年第1学期&nbsp;&nbsp;专业：机器人工程&nbsp;&nbsp;班级：智26.8
+</div>
+<table class="other-table">
+  <tr><td>这张表不应该被选中</td></tr>
+</table>
+<table id="kbtable" class="table table-bordered">
+  <thead>
+    <tr>
+      <th>节次</th>
+      <td>星期一</td><td>星期二</td><td>星期三</td><td>星期四</td><td>星期五</td><td>星期六</td><td>星期日</td>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td rowspan="2">上午<br>一<br>1-2节</td>
+      <td rowspan="2"><div class="kbcontent">人工智能导论<br><font title="教师">韩云</font><br><font title="周次(节次)">7-18周(1-2节)</font><br><font title="地点">明德楼B216</font><br><font title="教学班">(2026-2027-1)-ZB1040282-07</font><br><font title="教学班组成">智26.8</font></div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td>
+    </tr>
+    <tr></tr>
+
+    <tr>
+      <td rowspan="2">上午<br>二<br>3-4节</td>
+      <td rowspan="2"><div class="kbcontent">高等数学Ⅰ（上）<br><font title="教师">曾玉祥</font><br><font title="周次(节次)">7-18周(3-4节)</font><br><font title="地点">明德楼A103</font><br><font title="教学班">(2026-2027-1)-JC0247023-10</font><br><font title="教学班组成">智26.8</font></div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td>
+    </tr>
+    <tr></tr>
+
+    <tr>
+      <td rowspan="2">下午<br>三<br>5-6节</td>
+      <td></td>
+      <td rowspan="2"><div class="kbcontent">思想道德与法治<br><font title="教师">代维</font><br><font title="周次(节次)">7-17周(单)(5-6节)</font><br><font title="地点">明德楼B112</font><br><font title="教学班">(2026-2027-1)-GB0640014-10</font><br><font title="教学班组成">智26.7;智26.8</font></div><hr><div class="kbcontent">大学生心理健康教育<br><font title="教师">彭玉发</font><br><font title="周次(节次)">8-12周(双)(5-6节)</font><br><font title="地点">明德楼A310</font><br><font title="教学班组成">智26.8</font></div></td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>
+    <tr></tr>
+
+    <tr>
+      <td rowspan="2">下午<br>四<br>7-8节</td>
+      <td></td>
+      <td rowspan="2"><div class="kbcontent">人工智能导论<br><font title="教师">韩云</font><br><font title="周次(节次)">7-18周(7-8节)</font><br><font title="地点">明德楼B218</font><br><font title="教学班组成">智26.8</font></div></td>
+      <td></td>
+      <td rowspan="2"><div class="kbcontent">国家安全教育<br><font title="教师">陈洪英</font><br><font title="周次(节次)">6-10周(7-8节)</font><br><font title="地点">明德楼B213</font><br><font title="教学班组成">智26.8</font></div><hr><div class="kbcontent">大学物理V（上）<br><font title="教师">张熙程</font><br><font title="周次(节次)">11-15周(7-8节)</font><br><font title="地点">明德楼B105</font><br><font title="教学班组成">智26.8</font></div><hr><div class="kbcontent">高等数学Ⅰ（上）<br><font title="教师">曾玉祥</font><br><font title="周次(节次)">16-18周(7-8节)</font><br><font title="地点">明德楼B119</font><br><font title="教学班组成">智26.8</font></div></td>
+      <td></td><td></td><td></td>
+    </tr>
+    <tr></tr>
+
+    <tr>
+      <td rowspan="2">晚上<br>五<br>9-10节</td>
+      <td rowspan="2"><div class="kbcontent">思想道德与法治<br><font title="教师">代维</font><br><font title="周次(节次)">12-14周(双)(9-10节)</font><br><font title="地点">明德楼B303</font><br><font title="教学班组成">智26.8</font></div></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td>
+    </tr>
+    <tr></tr>
+  </tbody>
+</table>
+<div id="foot">
+  注--内容顺序为：课程&lt;&gt;周次&lt;&gt;地点&lt;&gt;教师&lt;&gt;教学班&lt;&gt;教学班组成<br>
+  本学期2026-08-31正式上课至2027-01-17结束，共20周.&nbsp;打印时间：2026-08-31
+</div>
+</body>
+</html>
