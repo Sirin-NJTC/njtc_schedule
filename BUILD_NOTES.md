@@ -1838,4 +1838,96 @@ note 是「接口还没公布 2026、2027 年的放假安排」。界面据此�
   `@visibleForTesting static bool forceAutoSync` 把它分成「环境默认」与「用例强制」两层，
   5 个 AppState 用例才写得出来。
 
+---
+
+## 9.18 v1.1.12 发布：推到 GitHub + Release 挂四个 APK（用户 2026-10-04 追加）
+
+用户追加了两次要求：「推送到我的github仓库」、「apk也挂上去」。仓库是
+<https://github.com/Sirin-NJTC/njtc_schedule>（已由用户改成**公开**），默认分支 `main`。
+
+### 9.18.1 结果
+
+* 代码：第一条提交 `21d855f`（v1.1.3 时代）之后，本次提交 **`44b920c`**
+  「v1.1.12：网页导入修好、桌面小组件修好、三个显示/提醒开关、法定节假日联网更新」
+  （41 个文件：21 改 + 20 新增），再一条 **`aec581f`** 加 CI 工作流；`git push origin main` 成功，
+  仓库跟踪文件 95 → **116**。
+* Release：<https://github.com/Sirin-NJTC/njtc_schedule/releases/tag/v1.1.12>
+  （annotated tag `v1.1.12` → commit `aec581f77bd13daeac7bd4bae44c3390eb22fbac`），
+  **release id = 402942296**，说明文字来自 `D:\DSH\release_notes_v1.1.12.md`，**4 个资产**：
+
+  | Release 上的资产名 | 本地 dist 文件 | 字节数 |
+  | --- | --- | --- |
+  | `njtc-schedule-1.1.12-arm64-v8a.apk` | `内师课程表-1.1.12-arm64-v8a.apk` | 20,334,222 |
+  | `njtc-schedule-1.1.12-armeabi-v7a.apk` | `内师课程表-1.1.12-armeabi-v7a.apk` | 18,087,000 |
+  | `njtc-schedule-1.1.12-x86_64.apk` | `内师课程表-1.1.12-x86_64.apk` | 21,899,913 |
+  | `njtc-schedule-1.1.12-universal.apk` | `内师课程表-1.1.12-universal.apk` | 57,781,343 |
+
+  四个都 `state=uploaded` 且**服务端字节数与本地逐字节一致**；不带令牌的匿名 `HEAD` 请求
+  返回 `200 / Content-Length=20334222 / Content-Type=application/vnd.android.package-archive`，
+  说明别人（同学）能直接下载。
+
+### 9.18.2 资产名为什么是 ASCII（`njtc-schedule-<ver>-<abi>.apk`）
+
+第一次上传时脚本用的是中文名 `内师课程表-1.1.12-arm64-v8a.apk`，并且做了
+`[uri]::EscapeDataString($n)`。结果服务端收到的是 **`-1.1.12-arm64-v8a.apk`** ——
+中文**整段消失**（不是乱码、不是报错），四个资产全掉前缀，下载链接变成
+`.../download/v1.1.12/-1.1.12-arm64-v8a.apk`。
+
+原因：资产名是通过 URL query（`POST <upload_url>?name=<...>`）传的，Windows PowerShell 5.1 的
+`HttpWebRequest` 在拼这种带非 ASCII 的 URL 时把这段丢了。**结论：Release 资产名一律用 ASCII，
+在脚本里做「本地中文名 → 上传 ASCII 名」的映射**（`D:\DSH\github_release.ps1` 的 `$assets` 表）。
+本地 `D:\DSH\dist\内师课程表-*.apk` 保持中文名不动，只影响上传那一步。
+
+另外一个坑：修名字那一轮脚本先「清掉不在预期名单里的 `.apk`」，日志说清了 4 个，实际只删掉 1 个
+（那一行把 4 个名字打印在同一行，说明循环里 `$a` 拿到的是**整份资产数组**而不是单个元素）。
+最后是按 asset id 逐个 `DELETE` + 重新 `GET /releases/<id>/assets` 复核，才拿到干净的 4 个。
+**教训：批量删除之后必须重新拉一遍清单确认，别信循环里打印的那一行。**
+
+### 9.18.3 fine-grained 令牌踩了三次（重要）
+
+用户先给了一个 fine-grained PAT，三次都没写权限，每次现象不同：
+
+| 情况 | 现象 | 含义 |
+| --- | --- | --- |
+| 仓库还私有时，令牌用默认的 `Public repositories` 模式 | `GET /repos/Sirin-NJTC/njtc_schedule` = **404** | 404 而不是 403 = 这个令牌**根本看不见**这个仓库 |
+| 仓库改公开后 | 读接口全 200，但 `POST /repos/{o}/{r}/git/tags` 与 `POST /repos/{o}/{r}/releases` = **403** `{"message":"Resource not accessible by personal access token"}` | 看得见、但只有只读权限 |
+| 用户说「改好权限了」后再探 | 仍 403 | fine-grained 令牌在 `Public repositories` 模式下 GitHub **只给只读**，必须改成 `Only select repositories` + 显式把 `Contents` 设成 `Read and write` |
+
+* **别拿 `GET /repos/...` 返回里的 `permissions.push=true` 判断令牌**：那反映的是**用户**在该仓库的
+  角色（owner 当然 true），跟令牌作用域无关。
+* **判令牌有没有写权限，干净的探针是 `POST /repos/{o}/{r}/git/tags`**：成功会创建一个游离 tag 对象，
+  不改分支、不留可见痕迹；403 就是没写权限。
+* 用户最后给了 classic 令牌（勾 `repo`），第一次探针就 `CONTENTS-WRITE: OK`，后面才跑通。
+* 令牌是用户贴在聊天里的明文，**用完建议去 GitHub 设置里撤销/轮换**。
+
+### 9.18.4 中途那条 GitHub Actions 路线（留着，以后打 tag 会自动出包）
+
+拿不到写权限时改走 CI，文件在 `.github/workflows/release.yml`（提交 `aec581f`）：
+`on: push: tags 'v*'` + `workflow_dispatch`，`permissions: contents: write`，
+setup-java temurin 21、`subosito/flutter-action@v2` 固定 `flutter-version: 3.47.6`，
+跑 `flutter analyze` → `flutter test --reporter compact` → `flutter build apk --release --split-per-abi`
+→ `flutter build apk --release` → `softprops/action-gh-release@v2` 把
+`app-{arm64-v8a,armeabi-v7a,x86_64}-release.apk` 与 `app-release.apk` 传成 Release 资产。
+
+* **tag 触发的工作流必须已经存在于被 tag 的那个提交里**，否则推 tag 不会触发任何东西。所以
+  push 工作流之后要：`git tag -d v1.1.12`（删本地）→ `git tag -a v1.1.12`（在含工作流的新提交上重建）
+  → `git push origin :refs/tags/v1.1.12`（删远端旧 tag）→ `git push origin refs/tags/v1.1.12`
+  （这次才等同「新建 tag」，才触发工作流）。
+* 工作流确实跑起来了：run #1「发布 Release」，event=push、ref=v1.1.12、head=`aec581f`，
+  run id **37192180760**。但拿到 classic 令牌后改回本地直传，用
+  `POST /actions/runs/37192180760/cancel` **把它取消了**，免得 CI 再构建出另一套 `app-*.apk`
+  跟本地实测过的包装进同一个 Release。工作流文件留在仓库里，以后推 tag 就能自动出包
+  （注意 CI 出的包名是 `app-*.apk`，与本地的 `njtc-schedule-*.apk` 不同名）。
+
+### 9.18.5 PowerShell 5.1 上的两个坑（脚本必须绕开）
+
+* **`$ErrorActionPreference='Stop'` 会让 git 的正常提示变成致命错误**：`git push` 往 stderr 写
+  `Everything up-to-date`、`warning: LF will be replaced by CRLF` 时会被包成 `NativeCommandError`，
+  脚本直接在 push tag 那步死掉。解法：调 git 时临时 `$ErrorActionPreference='Continue'`、
+  `2>&1 | Out-String` 收输出，然后自己看 `$LASTEXITCODE` 是否 0。
+* **脚本刻意不用 `param()`**：因为统一用
+  `Invoke-Expression (Get-Content -Raw -Encoding UTF8 '<path>')` 执行（避免 PowerShell 5.1 把内联
+  中文/全角括号搞乱），带 `param()` 的脚本在这种执行方式下参数不好传；改成「从 `$env:GH_PAT`
+  或已有变量取默认值」。
+
 

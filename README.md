@@ -6,6 +6,26 @@
 > 📱 **本项目只做安卓版**（Windows 桌面工程已移除）。所有提醒能力基于 Android 的
 > `AlarmManager` + `Notification` 实现，在手机上真正可用。
 
+## 📦 下载安装
+
+最新版 **v1.1.12** 已发布到 GitHub Releases：
+
+**<https://github.com/Sirin-NJTC/njtc_schedule/releases/latest>**
+
+| 文件 | 体积 | versionCode | 适用 |
+| --- | --- | --- | --- |
+| `njtc-schedule-1.1.12-arm64-v8a.apk` | 19.39 MB | 2014 | **首选**，近几年绝大多数手机 |
+| `njtc-schedule-1.1.12-armeabi-v7a.apk` | 17.25 MB | 1014 | 2016 年前后的老机器 |
+| `njtc-schedule-1.1.12-x86_64.apk` | 20.89 MB | 4014 | 模拟器（Android Emulator / 安卓子系统） |
+| `njtc-schedule-1.1.12-universal.apk` | 55.10 MB | 14 | 不确定机型时用，四个架构都含 |
+
+> ⚠️ 这几个包用 Flutter 模板默认的 **debug 签名**，装到自己手机上用没问题，但**不能上架应用商店**
+> （换成自己的 keystore 的步骤见 `BUILD_NOTES.md`）。
+
+推 `v*` 标签会自动出包：`.github/workflows/release.yml` 会跑 `flutter analyze` → `flutter test`
+→ 构建四个 ABI → 传成 Release 资产。若要在本地重建并上传，用 `D:\DSH\github_release.ps1`
+（需 `GH_PAT` 环境变量，令牌对本仓库要有 `Contents: Read and write`）。
+
 ## ✨ 功能特性
 
 - 📥 **课程表导入**（三种方式）
