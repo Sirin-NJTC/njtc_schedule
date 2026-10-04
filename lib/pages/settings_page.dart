@@ -26,9 +26,13 @@ class SettingsPage extends StatelessWidget {
         children: [
           if (tt != null) _buildTimetableSettings(context, state, tt),
           const SizedBox(height: 16),
+          const _DisplaySettings(),
+          const SizedBox(height: 16),
           const _ReminderEntry(),
           const SizedBox(height: 12),
           const _PeriodEntry(),
+          const SizedBox(height: 12),
+          const _HolidayEntry(),
           const SizedBox(height: 12),
           const _WidgetEntry(),
           const SizedBox(height: 24),
@@ -129,6 +133,103 @@ class SettingsPage extends StatelessWidget {
       tt.totalWeeks = result;
       await state.updateTimetable(tt);
     }
+  }
+}
+
+/// 课表显示开关：周六 / 周日两列、非本周课程是否也画出来。
+///
+/// 这两个开关只影响**画成什么样**：不动课表数据，也不影响课程提醒
+/// （提醒只按课程自己的周次排）。
+class _DisplaySettings extends StatelessWidget {
+  const _DisplaySettings();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final prefs = state.displayPrefs;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '课表显示',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('显示周六 / 周日'),
+              subtitle: const Text(
+                '关掉后课表只画周一到周五，每一列更宽、更好点',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+              value: prefs.showWeekend,
+              onChanged: (v) =>
+                  state.updateDisplayPrefs(prefs.copyWith(showWeekend: v)),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('显示非本周课程'),
+              subtitle: const Text(
+                '把「本学期有、但本周不上」的课半透明画出来（默认只画本周要上的课）',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+              value: prefs.showInactiveCourses,
+              onChanged: (v) => state.updateDisplayPrefs(
+                prefs.copyWith(showInactiveCourses: v),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 「法定节假日」入口行。
+class _HolidayEntry extends StatelessWidget {
+  const _HolidayEntry();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final cal = state.holidays;
+    final skip = state.reminderPrefs.skipHolidays;
+    final on = skip && !cal.isEmpty;
+
+    return Card(
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: (on ? AppTheme.primary : AppTheme.textSecondary)
+                .withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            Icons.event_available_rounded,
+            size: 20,
+            color: on ? AppTheme.primary : AppTheme.textSecondary,
+          ),
+        ),
+        title: const Text(
+          '法定节假日',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            skip ? '${cal.summaryText} · 放假不提醒' : '${cal.summaryText} · 提醒忽略节假日',
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).pushNamed('/holidays'),
+      ),
+    );
   }
 }
 
@@ -346,7 +447,7 @@ class _AboutSection extends StatelessWidget {
             SizedBox(height: 8),
             Text(
               // 版本号需与 pubspec.yaml 的 `version:` 保持一致（前者显示、后者决定 APK 文件名与 versionCode）。
-              '内江师范学院课程表 v1.1.8\n'
+              '内江师范学院课程表 v1.1.12\n'
               '支持从教务系统导入课程表（网页登录抓取 / 导出文件 / 粘贴文本），'
               '自动识别周次、节次、单双周，提供周次切换、课堂倒计时、多课表管理等实用功能，'
               '也可以手动添加、编辑、删除单门课程（导入缺了教师或教室时可直接补）；'

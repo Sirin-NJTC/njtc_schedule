@@ -31,6 +31,9 @@ class HomePage extends StatelessWidget {
                     child: TimetableGrid(
                       timetable: tt,
                       currentWeek: state.currentWeek,
+                      showWeekend: state.displayPrefs.showWeekend,
+                      showInactiveCourses:
+                          state.displayPrefs.showInactiveCourses,
                       onCourseTap: (c) => showCourseDetail(context, c),
                     ),
                   ),

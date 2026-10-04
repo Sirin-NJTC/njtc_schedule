@@ -89,6 +89,8 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
             const SizedBox(height: 16),
             _buildEndCard(prefs),
             const SizedBox(height: 16),
+            _buildHolidayCard(app),
+            const SizedBox(height: 16),
             if (status?.isVivo ?? false) ...[
               _buildVivoCard(app, prefs, status),
               const SizedBox(height: 16),
@@ -276,6 +278,39 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
           subtitle: '下课前 5 分钟预告下一节课；连堂的课（同名同地点、节次紧接）不提醒',
           padding: EdgeInsets.zero,
         ),
+      ),
+    );
+  }
+
+  /// 法定节假日：开关本身与日期清单都在「设置 → 法定节假日」里，这里只做入口 + 现状。
+  ///
+  /// 不在这里再放一个开关，是为了避免同一个偏好有两个看起来独立的开关
+  /// （改一边、另一边看起来没变，用户会以为是 bug）。
+  Widget _buildHolidayCard(AppState app) {
+    final cal = app.holidays;
+    final skip = app.reminderPrefs.skipHolidays;
+    return _card(
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(
+          Icons.event_available_rounded,
+          color: skip ? AppTheme.primary : AppTheme.textSecondary,
+        ),
+        title: const Text(
+          '法定节假日',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            skip
+                ? '放假当天不提醒 · ${cal.summaryText}（含调休补班日，可自行调整）'
+                : '已关闭：放假当天照常提醒 · ${cal.summaryText}',
+            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).pushNamed('/holidays'),
       ),
     );
   }

@@ -1345,3 +1345,497 @@ vivo 准入，仍走 `METTING`）。
 * 真机跑 `integration_test` 要 `adb reverse` + `--dart-define`；而且**跑完 App 会被卸载**
   （`flutter test integration_test` 的行为），所以跑完要记得把 release 包装回去。
 
+## 9.14 v1.1.9 —— 桌面小组件白卡的真因：`android.view.View` 不在 RemoteViews 白名单里
+
+### 9.14.1 现象
+
+用户 v1.1.8 把「今日课程」拖到桌面后，看到的是一张**纯白圆角卡片**（截图里连一个字都没有）。
+同时 `dumpsys appwidget` 显示小组件**已经正常绑定**、宿主也**拿着我们推的 `RemoteViews`**：
+
+```
+provider [930] ProviderId{uid:10515, … cmp:ComponentInfo{cn.edu.njtc.njtc_schedule/cn.edu.njtc.njtc_schedule.widget.TodayWidgetProvider} … initialLayout=#7f0b003b}
+Widgets: [0] id=23 … views=android.widget.RemoteViews@83069c6 visible=false
+```
+
+App 一启动还会打 `NjtcWidget: 刷新小组件 1 个` —— 也就是说**通道是通的、数据也推到了宿主**，
+问题只出在「宿主拿到 RemoteViews 之后画不出来」。
+
+### 9.14.2 定位手法：别截图，直接把「画成什么样」问出来
+
+真机有安全锁屏，`adb shell input` 解不开，桌面截图这条路是堵死的（试了亮屏、MENU、上滑，
+`mDreamingLockscreen` 一直是 `true`）。于是给原生加了一个**探针**：
+
+* `TodayWidgetProvider.buildViews(context, widgetId)`：把「画界面」从 `render()` 里抽出来，
+  变成可以单独调用的纯函数；
+* `TodayWidgetProvider.probeRendered(context)`：`buildViews(...).apply(context, FrameLayout(context))`
+  之后用 `findViewById<TextView>(id).text` / `visibility` 把**真正会被宿主渲染出来的文字**
+  读出来，返回 `Map`（`date` / `week` / `empty` / `emptyVisible` / `footer` / `rows`）；
+* `WidgetBridge` 加 `"probe"` 方法，`WidgetService.probe()` 转发（**这一路不许静默吞异常**，
+  否则就又变成「查不出来」）。
+
+在模拟器上一跑，探针没返回 nil，而是把宿主侧的异常原文带回来了：
+
+```
+WidgetService.probe 失败：PlatformException(error, Binary XML file line #60 in
+cn.edu.njtc.njtc_schedule:layout/widget_today: Error inflating class android.view.View, null,
+android.view.InflateException: Binary XML file line #60 in …:layout/widget_today:
+Error inflating class android.view.View
+Caused by: android.view.InflateException: …: Class not allowed to be inflated android.view.View
+```
+
+### 9.14.3 根因
+
+`RemoteViews` 只允许白名单里的控件类（平台里带 `@RemoteView` 注解的那些：`TextView`、
+`ImageView`、各种 `Layout`、`ProgressBar`…）。**裸 `android.view.View` 不在白名单里。**
+而 `widget_today.xml` 里那 5 条颜色分隔条（`bar_1`…`bar_5`）正是用 `<View>` 写的
+（第 56/108/160/212/264 行）⇒ 宿主 inflate 到第一条就抛异常 ⇒ **整个布局画不出来**，
+用户在桌面上看到的就只是一张空卡。
+
+同一份错误也发生在 `widget_today_preview.xml`（我为「添加小组件」预览新写的布局，
+里面同样用了 `<View>`）—— 所以「添加界面也是白卡」和「桌面也是白卡」是**同一个根因**。
+
+### 9.14.4 改法
+
+* `widget_today.xml`：5 处颜色条 `<View>` → `<ImageView android:contentDescription="@null" />`
+  （`ImageView` 在白名单里，`setInt(id, "setBackgroundColor", color)` 一样有效），
+  并在第一处写了长长的注释说明为什么不能用 `View`。
+* `widget_today_preview.xml`：3 处同样改掉，抬头注释写明这条规则。
+* `widget_today.xml` 的 `widget_footer` 补默认文字「打开 App 同步课表」：
+  XML 里原本没有默认 text，而文字全靠代码填，万一还没同步过一次，卡片就是空的。
+* `res/xml/widget_today_info.xml` 补上 `android:previewLayout="@layout/widget_today_preview"`
+  与 `android:previewImage="@drawable/widget_preview"`（老系统只认后者、API 31+ 优先前者；
+  两者都没有时，「添加小组件」列表里就只有一张白卡）。
+  预览图由 `tool/make_widget_preview.py`（Pillow，500×252）画出来。
+* 顺手把 `WidgetData.build` 抛异常的分支从「`return`（什么都不更新）」改成
+  **渲染一张兜底卡**（「课表数据读不出来，打开 App 重试」）：原先取数一失败，
+  宿主就永远停在占位/上次内容上，用户同样只会看到白板。
+* 新增 `override fun onEnabled()`：第一个小组件被添加时立刻刷新，不必等 App 启动一次。
+
+### 9.14.5 守住它
+
+* 新增单测 `test/widget_layout_whitelist_test.dart`（3 条）：
+  扫描 `android/app/src/main/res/layout/widget_*.xml`，**任何不在白名单里的控件名都算失败**，
+  裸 `<View>` 单独给一条更直白的提示；再单独断言 `bar_1`…`bar_5` 的标签是 `ImageView`。
+  这样「下次又写回 `<View>`」会直接红。
+* 新增集成测试 `integration_test/widget_render_e2e_test.dart`（2 条）：
+  ①只读探针（真机上用来问「你现在会画成什么样」）；②注入今天两门课再探针断言
+  （日期含 `M月D日`、`week == 第1周`、两行、页脚含 `2 门`、`emptyVisible == false`）。
+
+### 9.14.6 验证（1.1.9）
+
+* `flutter analyze` → `No issues found!`
+* `flutter test` → **`+123: All tests passed!`**（120 + 3 条白名单守卫）
+* `gradlew :app:compileDebugKotlin` → `BUILD SUCCESSFUL`
+* 模拟器（API 37）：`flutter test integration_test/widget_render_e2e_test.dart -d emulator-5554`
+  → **`+2: All tests passed!`**，探针打出真实渲染结果：
+  * 空存档：`{"date":"10月4日 周日","week":"","footer":"打开 App 同步一次课表","emptyVisible":true,"rows":[],"empty":"今天没课"}`
+  * 注入两门课后：`{"date":"10月4日 周日","week":"第1周","footer":"共 2 门 · 点开看全部","emptyVisible":false,"rows":["08:00-09:40 人工智能导论@明德楼B216","10:00-11:40 高等数学Ⅰ（上）@明德楼A203"],"empty":"今天没课"}`
+* 真机（vivo V2520A / Android 17）装 1.1.9 后：**桌面截图确认真机上也画得出来了**，见 §9.14.7。
+
+### 9.14.7 真机实测（vivo V2520A / Android 17，2026-10-04）
+
+**1.1.9 装上去了**：`adb -s 10CG681D4N004KB install -r 内师课程表-1.1.9-arm64-v8a.apk` → `Success`；
+`dumpsys package` 读到 `versionName=1.1.9`；`am start -n cn.edu.njtc.njtc_schedule/.MainActivity`
+→ `ActivityTaskManager: Displayed … +465ms`。
+
+**原计划的取现路走不通**：这台 vivo 在重装之后**不再输出我们 App 自己的任何日志** ——
+`logcat -c` 后冷启动，`logcat -d -s NjtcWidget:* NjtcVivo:*` 是空的，
+`logcat -d | Select-String 'Njtc|flutter|AndroidRuntime'` 只剩 `adbd / Finsky / BinderSender /
+BatteryStatsService / ActivityTaskManager` 这些系统行，整个 buffer 只有 277 行。
+（同一天早些时候同机同标签是能看到 `NjtcWidget: 已同步小组件数据` 的，所以这不是标签写错。）
+顺带一个坑：`logcat --pid=` 想拼变量时**不能叫 `$pid`** —— PowerShell 里 `$pid` 是只读自动变量，
+赋值直接报 `无法覆盖变量 PID，因为该变量为只读变量或常量`，于是 `--pid=` 拿到空值、命令静默无输出。
+
+**改用「系统侧状态 + 广播 + 截图」三件套取证**（都不依赖 App 日志）：
+
+1. `dumpsys appwidget` 找到我们的 provider 与已放置的实例：
+   ```
+   [930] provider ProviderId{uid:10515, app:10515, cmp:ComponentInfo{cn.edu.njtc.njtc_schedule/
+        cn.edu.njtc.njtc_schedule.widget.TodayWidgetProvider}, profile:UserHandle{0}}
+     min=(64001x28161) minResize=(64001x28161) updatePeriodMillis=1800000 resizeMode=3 initialLayout=#7f0b003b
+   Widgets:
+   [15] id=32
+     host=HostId{user:0, app:10108, hostId:1024, pkg:com.bbk.launcher2}
+     provider=ProviderId{uid:10515, …}
+     views=android.widget.RemoteViews@f8038c6
+   ```
+   ⇒ 小组件实例是 **`id=32`**（不是 23，23 是「番茄小说」那个 `com.dragon.read` 的，
+   早先我看走了眼），宿主是 vivo 桌面 `com.bbk.launcher2`，**一直好好挂在桌面上**。
+2. 手工触发一次刷新：
+   `adb shell am broadcast -a cn.edu.njtc.njtc_schedule.WIDGET_REFRESH -n cn.edu.njtc.njtc_schedule/.widget.TodayWidgetProvider`
+   → `Broadcast completed: result=0`，再 dump 一次，**我们的 `views=` 从 `@f8038c6` 变成 `@ee520b5`**
+   （同一个列表里番茄小说的 `@bf2b83` 纹丝不动）⇒ 1.1.9 的 `onReceive → refreshAll → buildViews →
+   updateAppWidget` 在真机上带着**真实的 22 门课存档**跑通了，而且宿主收下了新 RemoteViews、没抛 inflate 异常。
+3. 亮屏 + `input keyevent 3`（HOME）后 `dumpsys window` 已是
+   `mCurrentFocus=Window{… com.bbk.launcher2/com.bbk.launcher2.Launcher type=1}`、`mDreamingLockscreen=false`，
+   直接 `screencap` 把桌面拍下来（存 `screenshots/widget_ok_real_device.png`）：
+
+   ```
+   10 月 4 日 周日                          第 5 周
+   今天没课
+   今天没课，好好休息
+   内师课程表
+   ```
+
+   ⇒ **白卡没了，字全在**。日期/周次/「今天没课」判断/页脚四块都来自真机上那份真实课表
+   （今天 10-04 是周日，导入的 22 门课确实没有周日课，所以「今天没课」是**正确**结果而不是失败）。
+   想看有课的样子可以改用模拟器上的 `widget_render_e2e_test.dart`（注入两门课那条用例）。
+
+### 9.14.8 教训
+
+* **「日志说推送成功」不等于「界面对」**：`updateAppWidget` 不报错、宿主持有 RemoteViews、
+  `dumpsys` 里 id 都绑好了，界面照样可以是白的 —— 因为**画不出来是在宿主进程里失败的**。
+  这种「跨进程渲染」的问题，必须在**宿主那一侧**取证（`RemoteViews.apply()` 后读控件），
+  光看自己进程的日志永远看不出问题。
+* **宿主 inflate 用的白名单是真约束，不是建议**：`RemoteViews` 的注释里写得很清楚，
+  但写布局时很容易顺手写个 `<View>` 当分隔条 —— 它在普通 Activity 里完全合法。
+  凡是被 RemoteViews 承载的布局，都要按白名单挑控件（并写成测试）。
+* **别让「查不到」的路径静默失败**：探针第一版把异常吞了，返回 `null`，于是只知道「没数据」；
+  把异常打出来，一次就拿到 `Class not allowed to be inflated`。
+  凡是「用来查问题」的代码，永远不要 catch 完就当没事。
+* **解锁不了的手机别硬刚**：安全锁屏下 `adb shell input` 是解不开的（试过亮屏/MENU/上滑，
+  `mDreamingLockscreen` 一直为 `true`）。**但也别就此认定它一直锁着** —— 后来一查
+  `mCurrentFocus` 已经是桌面了（用户自己解锁过），白捡一张真机截图。取现前先问一次设备状态，
+  别拿上几轮的结论当现在的事实。
+* **设备会「吞日志」，所以证据不能只押在日志上**：这台 vivo 重装 1.1.9 之后不再输出我们的
+  `NjtcWidget`/`flutter` 日志（buffer 里 277 行全是系统行）。跨进程渲染这种事，
+  更硬的证据是**系统侧状态**（`dumpsys appwidget` 里 `views=` 对象的句柄变没变）与**屏幕截图**：
+  广播前后句柄从 `@f8038c6` 变成 `@ee520b5`，比一万行日志都直接。
+
+---
+
+## 9.15 v1.1.10 —— 连堂课在课表上「只占一节」
+
+### 9.15.1 现象与复现
+
+用户 2026-10-04 反馈：**多节连堂的课在课表上只占用一节课的位置**。
+
+先写「量尺寸」的用例把它钉在测试里，别靠眼睛猜（`test/timetable_grid_test.dart`
+新增「连堂课块撑满所占节次」组）。改之前实测：
+
+| 课程占用 | 卡片应有的高 | 实际画出来 |
+| --- | --- | --- |
+| 第 3-6 节（跨 4 小节） | 4 × 74 = 296 | **42 px** |
+| 第 1-2 节（跨 2 小节） | 2 × 74 = 148 | **61 px** |
+
+也就是说卡片高度几乎只跟**文字几行**有关，跟它占几节**完全无关** —— 连堂课当然看着「只占一节」。
+
+### 9.15.2 根因
+
+`lib/widgets/timetable_grid.dart` 的 `_buildDayColumn` 里，课程块是这么套的：
+
+```
+Positioned(top, left, width, height)   // height = (endSection-startSection+1) * sectionHeight ✅ 算得没错
+  └─ Stack(children: [CourseCard, if (单双周) Positioned(角标)])
+```
+
+外层 `Positioned` 的高度是对的，坏在里层 `Stack` 用了**默认的 `StackFit.loose`**：
+非定位子控件拿到的是「0..宽 × 0..高」的**松约束**；而 `CourseCard` 是
+`LayoutBuilder → Container(不带宽高) → Column(mainAxisSize: min)`，于是它**按内容自适应**高度
+（两三行字 ≈ 42~61px），把 `Positioned` 留出来的高度白白空着。
+
+顺带说明这不是「本来就这么设计」：`timetable_grid.dart` 文件头第 6 行写着
+「课程块按「跨了几节」撑高，不再是「第一节画卡片、后面画色块」」—— 意图如此，只是实现漏了这一层约束。
+
+### 9.15.3 改法
+
+`lib/widgets/timetable_grid.dart`：里层 `Stack` 加 `fit: StackFit.expand`（并留注释说明为什么不能省）。
+
+```dart
+child: Stack(
+  fit: StackFit.expand,   // 不能省：默认 loose 会让 CourseCard 缩成内容高度
+  children: [ CourseCard(...), if (p.course.oddEven != 0) Positioned(...) ],
+),
+```
+
+`fit` 只作用于**非定位**子控件，右上角的单/双周角标是 `Positioned`，位置不受影响。
+
+### 9.15.4 验证
+
+* `test/timetable_grid_test.dart` 新增 3 条：跨 4 小节 = 296、跨 2 小节 = 148、
+  并排冲突课各自撑满（并排时宽度均分）。
+* `flutter analyze` → **No issues found**；`flutter test --reporter compact` → **126 用例全绿**（123 + 3）。
+* **把真实课表渲染成 PNG 肉眼看一遍**：临时写了个 `test/zz_render_preview_test.dart`
+  （用完即删），用 `XlsReader` + `TimetableParser` 读真实 `test/fixtures/njtc_sample.xls`，
+  再 `RenderRepaintBoundary.toImage()` 导出 `screenshots/grid_span_fix_110.png`。
+  图里每一块课程都**正好铺满它占的两行**（含右上角单双周角标），
+  连堂「只占一节」的样子确实没了。
+  （注意：widget 测试里的中文会渲染成方块，那是测试字体，不是 bug；这张图是用来看**版式**的。）
+* 真机 1.1.10 装机核对：`adb install -r 内师课程表-1.1.10-arm64-v8a.apk` → `Success`，
+  `dumpsys package` 显示 `versionCode=2012 versionName=1.1.10`；
+  装机那一刻手机正在被用户使用（前台是 QQ），所以**没有强行切前台截图**，
+  真机课表的目视确认留给用户（§9.15.5 记账一条教训：自动化验证也要挑不打扰用户的时机）。
+* 构建：`D:\DSH\build_110.ps1` 跑完 `ALLDONE`，`D:\DSH\dist` 四个包
+  `内师课程表-1.1.10-{universal,armeabi-v7a,arm64-v8a,x86_64}.apk`，
+  `aapt2 dump badging` 核对 = **versionCode 12 / 1012 / 2012 / 4012，versionName `1.1.10`**，
+  体积 53.64 / 16.72 / 18.95 / 20.39 MB；上一版四个 1.1.9 已移入 `D:\DSH\dist\old\`。
+
+### 9.15.5 教训
+
+* **「算对了」不等于「画对了」**：`_layout()` 的 span 计算没错，外层 `Positioned` 的高度也没错，
+  可因为少了一个 `fit`，界面上就是错的。旧用例只断言「这门课出现了没有」，没人**量过尺寸**。
+  UI bug 要用 `tester.getSize()` 量出来 —— 这类断言比 `findsOneWidget` 值钱得多。
+* **Flutter 的约束默认是松的**：`Stack` / `Row` / `Column` 的非定位子控件都拿松约束，
+  子控件自己不定尺寸就会「缩水」。要撑满得显式 `StackFit.expand` / `SizedBox.expand` /
+  `CrossAxisAlignment.stretch`。
+* **排过序的列表里别按下标认对象**：并排冲突那条断言我第一版用 `.first/.last`，
+  而 `_layout` 是按「先 startSection 再 endSection」排过的，顺序和我写的相反；
+  改成按课名 `find.ancestor(...)` 定位才稳。
+* **自动化验证也要挑时机**：装完 1.1.10 想顺手截一张真机课表，结果 `am start` 之后
+  前台还是用户正在用的 QQ —— 手机是用户的，别为了拿一张截图把人家的界面顶掉。
+  这类「要占用用户屏幕」的取证，要么换成离线渲染（本轮就是这么做的：导出 PNG），
+  要么当面问一句。
+
+---
+
+## 9.16 v1.1.11 —— 三个显示/提醒开关：周六日、非本周课程、法定节假日（含调休）
+
+### 9.16.1 需求（用户 2026-10-04）
+
+> 这个周六周日是否显示建议加一个开关，非本周课程是否显示也加一个开关，再设计一个
+> 法定节假日关闭通知的开关（自行调整节假日以及调休时间）
+
+三件事各自独立，但都要能持久化、都要立刻生效：
+
+| 开关 | 默认 | 作用 |
+| --- | --- | --- |
+| 显示周六 / 周日 | 开 | 关掉后课表只画周一~周五五列 |
+| 显示非本周课程 | 关 | 打开后把「本周不上」的课也画出来（半透明），方便看整学期分布 |
+| 放假当天不提醒 | 开 | 放假日整天不排课程提醒；配套一份**可自行增删改**的节假日 + 调休补班日日历 |
+
+### 9.16.2 显示开关：为什么画几列和布局分开
+
+`lib/widgets/timetable_grid.dart` 里加了两个 `final bool`（`showWeekend` / `showInactiveCourses`，
+都带默认值，老调用点不用改），并引入：
+
+```dart
+int get _visibleDays => widget.showWeekend ? days : 5;   // days 仍是 7
+```
+
+**只影响「画几列」，不影响 `_layout()` 的索引**（`_buildDayColumn(d)` 里的 `d` 依旧是
+`0..6` 的星期下标）。这样避免了「下标要不要 −1」「今天高亮算第几列」这类换算错误 ——
+换算只出现在一处：`_todayColumn` 末尾 `return col < _visibleDays ? col : null;`
+（周末列被关掉时，今天若是周六/周日就不高亮，而不是高亮到一列看不见的地方）。
+
+非本周课程用**半透明**表达而不是隐藏式灰掉：`_Placed` 增加 `final bool active`，
+课程块外面套 `Opacity(opacity: p.active ? 1.0 : 0.35)`。点它仍然能看课程详情
+（`onCourseTap` 不变），因为「非本周」不等于「这门课不存在」。
+
+### 9.16.3 节假日日历：只列放假日，补班日留给用户
+
+`lib/models/holiday_calendar.dart`（新）+ `lib/storage/holiday_store.dart`（新）：
+
+* `HolidayCalendar{ holidays: List<HolidayDay>, makeups: List<MakeupDay> }`，
+  两者都序列化成「一行一条」的纯文本（`2026-10-01|国庆节`、`2026-10-11|3|补周三的课`），
+  存进 SharedPreferences 的两个键（`njtc_holidays` / `njtc_holiday_makeups`）。
+* **两个键都不存在**才回落到 `HolidayCalendar.builtin()`（内置 13 天放假日）；
+  用户把放假日**全删光**时读回来是**空的**，不会「你又给我恢复了」。
+* 内置放假日是**估算值**（2026 中秋 9-25~27、国庆 10-01~07、2027 元旦 1-1~3）：
+  这一轮 `web_search` 被限流（`firecrawl returned 429 … retry_after_seconds: 52765`），
+  没能核对国务院通知，所以**补班日一条都不猜** —— 各校调休安排差别大，猜错会漏响或多响。
+  用户可以在设置里自己加。
+* 调休补班日的语义是「这一天按周几上课」：`MakeupDay(date, weekday, note)`，
+  `weekday` 1~7（周一~周日）。
+
+### 9.16.4 原生侧：钩子挂在 `computeInstances()` 里
+
+`ReminderPlan` 增加三个带默认值的字段（不破坏老存档的解析）：
+
+```kotlin
+val skipHolidays: Boolean = true,
+val holidays: Set<Long> = emptySet(),      // epochDay
+val makeups: Map<Long, Int> = emptyMap(),  // epochDay -> 按周几上课
+```
+
+`ReminderScheduler.computeInstances()` 在算出 `isoDow`（这天本来是周几）与 `epochDay`
+之后插入两条：
+
+```kotlin
+if (plan.skipHolidays && plan.holidays.contains(epochDay)) continue
+val classDow = plan.makeups[epochDay] ?: isoDow
+```
+
+`dayCourses` 的过滤条件由 `c.dayOfWeek == isoDow` 改成 `c.dayOfWeek == classDow`。三个要点：
+
+* **放假是整天 `continue`**：一节课都不排，连「下节课预告」也不会漏出去；
+* **补班与开关无关**：`makeups` 是「学校安排今天上课」，即使把「放假当天不提醒」关掉，
+  补班日也照样按映射的周几排（它本来就不是放假）；
+* **两个钩子都在「排闹钟」这一层**，所以改日历之后必须**重新下发计划**才生效 ——
+  `AppState.updateHolidays()` / `resetHolidays()` 都会走一遍 `syncReminders()`，
+  而纯展示的 `updateDisplayPrefs()` 故意**不重排**（它跟闹钟没关系）。
+
+### 9.16.5 页面
+
+* 设置页（`lib/pages/settings_page.dart`）新增「课表显示」卡片（两个 `SwitchListTile`）
+  与「法定节假日」入口（显示 `放假 13 天 · 补班 0 天 · 放假不提醒`）。
+* 新页面 `lib/pages/holiday_settings_page.dart`（路由 `/holidays`）四块：
+  「节假日关闭通知」开关、「调休补班日」（列表 + 添加）、「放假日」（列表 + 添加 + 恢复内置）、
+  底部说明。添加补班日时若同一天已有放假日，会**移除那条放假日**并明确提示 ——
+  否则「放假日优先」会让刚加的补班日看起来毫无效果。
+* 提醒设置页也加了同一个入口（开关只在节假日页一处，避免两个看起来独立的开关）。
+
+### 9.16.6 验证
+
+* `flutter analyze` → `No issues found!`
+* `flutter test --reporter compact` → **`+171: All tests passed!`**（126 → 171，新增 45 条）：
+  `test/display_prefs_test.dart` 9 条、`test/holiday_calendar_test.dart` 约 20 条、
+  `test/holiday_settings_test.dart` 9 条、`test/timetable_grid_test.dart` 新增 5 条
+  （关掉周末只剩五列、非本周课半透明 0.35）。
+* `gradlew :app:compileDebugKotlin` → `BUILD SUCCESSFUL`（**JDK 要用
+  `C:\Program Files\Android\openjdk\jdk-21.0.8`**；PATH 上那个 JDK 25 会让 Gradle 直接失败）。
+* **新增原生 E2E** `integration_test/holiday_reminder_e2e_test.dart`（模拟器 API 37，
+  `flutter test integration_test/holiday_reminder_e2e_test.dart -d emulator-5554` → **`+1: All tests passed!`**）。
+  课程只排第 2 周（今天那周），避免「一周一次」的重复把结论搅浑，三个场景的实测输出：
+
+  ```
+  [E2E] 今天=2026-10-04 明天=2026-10-05(周1) 后天=2026-10-06(周2)
+  [E2E] 放假 → ok=true scheduled=0 next=- note=
+  [E2E] 放假但开关关掉 → scheduled=3 next=2026-10-05(周一) 07:30
+  [E2E] 无补班日 → scheduled=3 next=2026-10-06(周二) 07:30
+  [E2E] 带补班日 → scheduled=6 next=2026-10-05(周一) 07:30 note=
+  ```
+
+  ⇒ 明天标成放假日时**一个闹钟都没有**（`scheduled=0`、`next=-`）；把开关关掉立刻回来
+  （`next` 是明天 07:30）；补班日「明天按周二上课」让明天也多出 3 条提醒（3 → 6），
+  且首个提醒从后天提前到明天。最后 `cancelAll()` 收尾，不在设备上留闹钟。
+
+### 9.16.7 教训
+
+* **「一周一次」的课会让放假日断言写歪**：第一版我把「明天放假 ⇒ `scheduled == 0`」当成
+  必然，实测是 3 —— 因为课程每周都上，放假只跳过**那一天**，下一周的同一节照排
+  （日志里 `next=2026-10-12(周一)` 直接点出来了）。改成「课程只排第 2 周」之后，
+  这节课一周只有一次，`scheduled == 0` 才是这句话的正确写法。
+  **写断言前先问一句「这个数是怎么来的」**，否则很容易把「正确的行为」判成 bug。
+* **要证明「日历起了作用」，就得有对照组**：同一份计划关掉开关 → 3 条、开着 → 0 条，
+  这才是因果；只有「放假时是 0」的话，也可能是别的原因导致 0。
+  补班日同理：先跑一次**不带**补班日的（首个提醒 10-06），再跑带补班日的（首个提醒 10-05）。
+* **平台默认值要写在 Kotlin 的 `data class` 上**：`skipHolidays = true` 这类默认值保证了
+  「老存档 / 别的构造点」继续可解析；如果写成必填，旧版本的存档一读就崩。
+
+## 9.17 v1.1.12 —— 法定节假日联网更新（用户 2026-10-04 追加）
+
+### 9.17.1 需求与接口选型
+
+用户的追加要求：「法定节假日要求联网更新」。起因是 9.16.3 里那份内置日历是**估算值**
+（当初 `web_search` 被限流，从没核对过官方通知），所以必须有个「一键拉官方的」入口。
+
+`Invoke-WebRequest` 实测三个免费接口：
+
+* `https://timor.tech/api/holiday/year/2026`（**选中**）：无 key、一次拿全年、
+  `holiday:true` = 放假 / `holiday:false` = 调休补班，补班还带 `after`（在假期**之后**
+  还是之前）与 `target`（补的是哪个节）。实测 200 / 3431 字节。
+* `https://timor.tech/api/holiday/info/2026-10-01`：单日查询，要按天循环，放弃。
+* `https://api.apihubs.cn/holiday/get?year=2026&size=50`：字段是 `workday` /
+  `holiday_legal` 那一套，语义要另外映射，放弃。
+
+### 9.17.2 接口不给「补班那天按周几上课」，只能自己推
+
+接口只说「10-10 是国庆后补班」，**不说那天按周几的课表上课**。而原生提醒的调休语义是
+`makeups[epochDay] = 周几`（那天按周几上课）。于是写了
+`deriveMakeupWeekday({date, after, holidayEpochDays})`：最多往回（`after:true`）或往前
+（`after:false`）探 30 天，找到最近那段**连续假期**、展开整段，取段内工作日
+（周一~周五）的**最后一个**（after）或**第一个**（非 after）。
+
+2026 六条实测全对：`01-04→周五`、`02-14→周一`、`02-28→周一`、`05-09→周二`、
+`09-20→周五`、`10-10→周三`。推不出来时（找不到假期、整段都在周末）返回 null，
+调用方退回「这天真实的周几」，界面上也写明「按惯例推导，请按学校通知核对」——
+宁给一个能用的默认值，也不要因为推不出来就干脆不提醒。
+
+### 9.17.3 `merge`：只替换「联网真的覆盖到的年份」
+
+联网有数据的年份**整年替换**，没数据的年份原样保留。实测：内置 13 天 + 2026 联网 33 天
+⇒ **36 天**（2026 换成官方的 33 天；内置里 2027 元旦那 3 天留着，因为 2027 返回
+`{"code":0,"holiday":{}}`）。这样用户手动加的下一年校历不会被冲掉。
+
+`countDropped(base, fetched)` 顺带算出「会被冲掉几条」，用于覆盖前提醒。
+
+### 9.17.4 启动静默同步 + 30 天节流 + 测试环境不联网
+
+`AppState.init()` 末尾（`unawaited(WidgetService.sync(...))` 之后）：
+
+```dart
+if (HolidaySyncService.autoSyncEnabled && _shouldAutoSyncHolidays()) {
+  unawaited(syncHolidaysFromNetwork(silent: true));
+}
+```
+
+* `autoSyncEnabled` = 非 Web 且（`forceAutoSync` 或 `Platform.environment['FLUTTER_TEST'] != 'true'`）
+  —— 别让 `flutter test` 打真网络，测试全部走 `getOverride` 打桩；
+  `@visibleForTesting static bool forceAutoSync = false;` 是给「启动时到底会不会静默同步」
+  这类用例用的（默认 false，测试里显式打开）。
+* `_shouldAutoSyncHolidays()` 的判据（**顺序很重要**）：
+  1. `source == manual` → **false，绝不自动覆盖**；
+  2. `source != net`（也就是内置估算值）→ true；
+  3. 没有更新时间 → true；
+  4. 距今超过 30 天 → true，否则 false。
+* ⚠️ **静默同步也必须 `await syncReminders()`**：新拿到的放假日要真的从闹钟里去掉，
+  否则会出现「界面显示放假了、闹钟照响」。
+* `debugPrint('HolidaySync: ok=… note=… 放假=N 补班=M silent=…')` 是**真机取证的唯一线索**：
+  装完之后 `adb logcat -s flutter` 能看到这次联网到底成不成。
+
+### 9.17.5 失败不是异常，是返回值里的 note
+
+`HolidaySyncService.update()` **从不抛异常**，一律返回
+`HolidaySyncOutcome(ok, calendar, note, years)`：超时 / 无网 / HTTP != 200 / 不是 JSON /
+`code != 0` → `ok:false` + 中文 note；两年都返回空（还没公布）也是 `ok:false`，
+note 是「接口还没公布 2026、2027 年的放假安排」。界面据此显示
+「联网更新失败：…（日历保持原样）」。网络是外部依赖，让 UI 去 catch 异常不如让服务
+把「为什么没成功」当成返回值。
+
+### 9.17.6 界面
+
+节假日页顶部新增「联网更新」卡片：
+
+* 来源行：`内置估算值，建议联网更新` / `来自联网更新（10月4日 16:20）` /
+  `手动调整过，未联网核对`，后面跟 ` · 放假 N 天 · 补班 M 天`。
+* 「立即联网更新」按钮，转圈时禁用（`_syncing`）。
+* **手动改过之后再联网会先问一句**：「联网更新会按年份整年替换现在的日历，你手动加/改过
+  的条目可能被覆盖。继续？」——因为整年替换确实会冲掉用户自己加的日子。
+
+`holiday_store.dart` 因此多了来源信息：`njtc_holiday_source`（`builtin` / `net` / `manual`）
+与 `njtc_holiday_updated_at`，`clear()` 连它们一起删。
+
+### 9.17.7 验证
+
+* `test/holiday_sync_test.dart`（**16 用例**，夹具是**真实返回体**
+  `test/fixtures/holiday_2026.json` = 33 天放假 / 6 天补班，另有 `holiday_2027.json` 空年份）：
+  解析、补班推导、同日既放假又补班只留放假、merge 的年份边界、countDropped、
+  update 的「网络失败 / code≠0 / 未公布 / 全拿到」四种结局、`yearsFor` 跨年。
+* `test/holiday_settings_test.dart` 新增 **4 个用例**：卡片文案、点按钮后来源变 net 且天数变
+  `放假 36 天 · 补班 6 天`、失败时日历不动 + SnackBar、手动改过后二次确认（取消 / 继续两条路）。
+* `test/holiday_sync_test.dart` 末尾再补 **5 个 AppState 用例**（`forceAutoSync` + `getOverride`
+  打桩，验的就是「启动时到底会不会静默同步」）：从没同步过 → 换成官方 36 天并落盘；
+  **手动改过 → 一次接口都不打、用户那份日历原样留着**；30 天内同步过 → 不打；
+  40 天前同步过 → 会再打一次；`autoSyncEnabled` 在测试环境为 false。
+* **设备级实测（真网络，没有打桩）**：
+  * 模拟器（API 37，`内师课程表-1.1.12-x86_64.apk` / code 4014）：卸载重装（全新存档）→
+    冷启动 → `HolidaySync: ok=true note=2026 年 放假=36 补班=6 silent=true`。
+  * 真机 vivo V2520A（`10CG681D4N004KB`，**升级覆盖安装**，课表与设置保留，
+    `versionCode=2014`/`versionName=1.1.12`）→ 启动 → 同一行日志，
+    说明这是**真机上真的走通了 HTTPS**，不是打桩。
+* `flutter analyze` → **No issues found!**；`flutter test --reporter compact` →
+  **`+196: All tests passed!`**（171 → 191 → 196）。
+
+### 9.17.8 教训
+
+* **第一版断言把 36 写成了 33**：merge 是「按年份替换」，内置里 2027 那 3 天不属于被覆盖的
+  年份，所以结果是 33 + 3。**算期望值要按「哪些会被替换」，不是按「联网给了多少」**。
+* **同一段文案出现两次会让 `findsOneWidget` 失败**：卡片副标题与 SnackBar 都含
+  「放假 36 天 · 补班 6 天」，对话框与卡片说明都含「整年替换」。断言「出现过」用
+  `findsWidgets`，要精确就断言完整串。
+* **`const HolidayDay(DateTime(...))` 编不过**：`DateTime` 不是 const 构造，
+  位置参数构造器外面不能加 `const`（编译期直接报 `Cannot invoke a non-'const' constructor`）。
+* **纯函数 + 打桩取数是最划算的测法**：解析 / 推导 / 合并全做成纯函数，网络那层只留一个
+  `@visibleForTesting static Future<String> Function(Uri)? getOverride`，16 个用例 1 秒跑完，
+  一个真网络请求都不打。
+* **「启动时静默同步」差点把用户手动改的日历冲掉**：来源字段一开始只用于**显示**，
+  而 `_shouldAutoSyncHolidays()` 写的是「来源不是 net 就同步」——`manual` 也不等于 `net`，
+  于是用户手动加/删过的日历会在下次启动被悄悄换掉。**记录来源的字段，就要真的拿它做判断**；
+  现在的判据第一条就是 `source == manual → false`，想强制更新只能点页面上的按钮
+  （那里有二次确认）。这是写设备验证时顺手复查逻辑才发现的，不是测试报出来的。
+* **测试环境开关要做成显式的**：`autoSyncEnabled` 在 `flutter test` 下恒为 false 是对的
+  （不能打真网络），但那样「启动到底会不会同步」就永远测不到；用一个
+  `@visibleForTesting static bool forceAutoSync` 把它分成「环境默认」与「用例强制」两层，
+  5 个 AppState 用例才写得出来。
+
+

@@ -37,9 +37,22 @@
     提醒绝不会丢 —— 纯增益功能，可放心默认开启
   - 完整接入说明与申请邮件模板见 [`VIVO_ATOMIC_NOTIFICATION.md`](VIVO_ATOMIC_NOTIFICATION.md)
 - 🎨 **美观界面**：柔和渐变配色、卡片式课程块、Material 3 设计
+- 👀 **显示开关**（设置 → 课表显示）
+  - **显示周六 / 周日**：关掉后课表只画周一到周五五列，屏幕窄的时候更好看
+  - **显示非本周课程**：打开后，本周不上（周次或单双周不匹配）的课也会**半透明**画出来，
+    一眼能看到整学期的分布；点进去照样能看课程详情
 - 📅 **周次切换**：一键切换教学周，自动只显示该周实际要上的课；
   点中间的「第 N 周」可直接**选周**（四列网格，本周有标记、非本周显示对应日期），
   翻到别的周后会出现「**回到本周**」按钮；同格的冲突课**并排显示**，不再互相覆盖
+- 🎌 **法定节假日 / 调休**（设置 → 法定节假日）
+  - **放假当天不提醒**开关：放假日整天不排课程提醒（连「下节课预告」也不会漏出去）
+  - **联网更新**：一键拉取公开的放假 / 调休安排（按年份整年替换，没公布的年份保持不动）；
+    启动时若超过 30 天没更新过会自动静默同步一次，失败就保持原日历并说明原因；
+    **手动改过的日历不会被自动覆盖**（想强制更新就点页面上的按钮，会有二次确认）
+  - 内置一份放假日历（2026 中秋 / 国庆、2027 元旦，**估算值**），可以**自己增删改**；
+    调休补班日也由你自己加 —— 格式是「这一天**按周几**上课」，补班日照样提醒
+    （联网拿到的补班日，「按周几上课」按惯例推导，界面会提示核对）
+  - 改完日历会**立刻重排**闹钟，不用重装也不用重启
 - ⏰ **课堂倒计时**：显示距离下一节课的剩余时间
 - 📚 **多课表管理**：可保存多份课表，随时切换、重命名、删除
 - 🔄 **单双周支持**：自动识别单周 / 双周 / 每周课程
@@ -104,8 +117,13 @@ flutter run -d <device-id>
 
 ```bash
 flutter analyze   # 应当输出 No issues found!
-flutter test      # 120 个用例全部通过
+flutter test      # 196 个用例全部通过
 ```
+
+`test/widget_layout_whitelist_test.dart` 会扫描 `android/app/src/main/res/layout/widget_*.xml`，
+只允许 `RemoteViews` 白名单里的控件（`android.view.View` 之类会直接让宿主 inflate 失败、
+桌面小组件变成一张白卡 —— 1.1.6~1.1.8 的白卡就是这么来的），所以这个测试**必须**在项目根用
+`flutter test` 跑（它读的是相对路径）。
 
 课程提醒与网页导入都需要真实设备上的端到端验证（会真的排闹钟、真的发通知、
 真的开 WebView）：
@@ -113,6 +131,10 @@ flutter test      # 120 个用例全部通过
 ```bash
 # 提醒链路：排闹钟 → 发通知 / 原子通知字段
 flutter test integration_test/reminder_e2e_test.dart -d <device-id>
+
+# 节假日 / 调休补班日真的会改闹钟（放假不排、补班换个周几排）
+#   注意：跑完 App 会被卸载，请用模拟器，别拿装了真实课表的真机跑
+flutter test integration_test/holiday_reminder_e2e_test.dart -d emulator-5554
 
 # 网页导入（渲染后的 DOM 路径）：先起一个固件 HTTP 服务
 python -m http.server 8137 --bind 0.0.0.0 --directory test/fixtures
@@ -252,6 +274,12 @@ flutter build appbundle --release
 > 刷新时机：改课表 / 改作息 / 换课表时 App 会主动推一次；此外跨零点、改系统时间或时区、
 > 重启手机、App 更新后都会自动重画（系统最小刷新间隔 30 分钟，所以不依赖定时轮询）。
 
+> 在「添加小组件」面板里看到的是一张**预览图**（`drawable-nodpi/widget_preview.png` +
+> `layout/widget_today_preview.xml`）。预览与本体一样，**只能用 `RemoteViews` 白名单里的控件**：
+> 写个裸 `<View>` 当颜色条，宿主 inflate 时会抛 `Class not allowed to be inflated`，
+> 桌面上就只剩一张白卡（1.1.6~1.1.8 的白卡正是这么来的）。
+> 现在有 `test/widget_layout_whitelist_test.dart` 把这条守住，改布局时请一并跑 `flutter test`。
+
 ## 🏗️ 项目结构
 
 ```
@@ -264,23 +292,29 @@ njtc_schedule/
 │   │   ├── course.dart                  # 课程模型（含单双周判断）
 │   │   ├── timetable.dart               # 课表模型（按天/周筛选）
 │   │   ├── period.dart                  # 节次作息时间（11 节）
-│   │   └── reminder_prefs.dart          # 提醒偏好（时机 / 下课 / 原子通知）
+│   │   ├── display_prefs.dart           # 课表显示开关（周六日 / 非本周课程）
+│   │   ├── holiday_calendar.dart        # 节假日 + 调休补班日（含内置放假日历）
+│   │   └── reminder_prefs.dart          # 提醒偏好（时机 / 下课 / 原子通知 / 放假不提醒）
 │   ├── services/
 │   │   ├── timetable_parser.dart        # 课表解析器（核心，含页脚学期信息）
 │   │   ├── xls_reader.dart              # 纯 Dart 的 .xls(BIFF8) 读取器
 │   │   ├── reminder_service.dart        # MethodChannel 桥接原生提醒引擎
 │   │   ├── widget_service.dart          # MethodChannel 把课表推给桌面小组件
 │   │   ├── zf_html_parser.dart          # 正方解析（#kbtable/.kbcontent、jwglxt JSON 接口、多级兜底）
+│   │   ├── holiday_sync_service.dart    # 节假日联网更新（解析 / 补班日推导 / 按年份合并）
 │   │   └── jwxt_service.dart            # 网页登录导入（WebView → 抓取 → 解析链路）
 │   ├── storage/
 │   │   ├── timetable_store.dart         # 课表本地持久化
 │   │   ├── period_store.dart            # 自定义节次时间的持久化
+│   │   ├── display_store.dart           # 显示开关的持久化
+│   │   ├── holiday_store.dart           # 节假日 / 补班日的持久化
 │   │   └── reminder_store.dart          # 提醒偏好本地持久化
 │   ├── pages/
 │   │   ├── home_page.dart               # 首页（课表视图 + 周次选择器 + 倒计时 + 提醒入口）
 │   │   ├── import_page.dart             # 导入页（网页登录 / 文件 / 粘贴）
 │   │   ├── course_edit_page.dart        # 手动添加 / 编辑 / 删除单门课程
 │   │   ├── period_settings_page.dart    # 节次上下课时间自定义
+│   │   ├── holiday_settings_page.dart   # 法定节假日 / 调休补班日
 │   │   ├── timetables_page.dart         # 多课表管理
 │   │   ├── reminder_settings_page.dart  # 课程提醒设置页
 │   │   └── settings_page.dart           # 设置页
@@ -306,17 +340,27 @@ njtc_schedule/
 │       ├── NjtcWidgetStore.kt           # 小组件自己的持久化（timetable / periods / has_timetable）
 │       ├── TodayWidgetProvider.kt       # AppWidgetProvider（静态 5 行 RemoteViews，不用列表）
 │       └── WidgetBridge.kt              # MethodChannel：Dart 推数据 → 落盘 → 刷新
+├── android/app/src/main/res/
+│   ├── layout/widget_today.xml          # 小组件本体布局（只用 RemoteViews 白名单控件！）
+│   ├── layout/widget_today_preview.xml  # 「添加小组件」面板里的预览布局（静态示例文字）
+│   ├── xml/widget_today_info.xml        # AppWidgetProviderInfo（previewLayout / previewImage）
+│   └── drawable-nodpi/widget_preview.png# 预览图（由 tool/make_widget_preview.py 生成）
 ├── test/
 │   ├── timetable_parser_test.dart       # 解析器测试（内含真实课表全量回归）
 │   ├── xls_reader_test.dart             # .xls 读取链路测试
 │   ├── zf_html_parser_test.dart         # 正方 HTML / jwglxt JSON 解析测试
 │   ├── web_import_test.dart             # 网页导入解析链路测试（四级兜底）
-│   ├── timetable_grid_test.dart         # 网格渲染测试（冲突并排 / 高节次 / 单双周）
+│   ├── timetable_grid_test.dart         # 网格渲染测试（冲突并排 / 高节次 / 单双周 / 连堂撑高 / 显示开关）
 │   ├── home_page_test.dart              # 首页交互测试（周次选择器 / 回到本周）
 │   ├── app_flow_test.dart               # 端到端：真实 .xls → 解析 → 网格渲染断言
 │   ├── course_edit_test.dart            # 手动增删改课程
 │   ├── period_settings_test.dart        # 节次时间自定义
+│   ├── display_prefs_test.dart          # 显示开关：模型 / 持久化 / AppState
+│   ├── holiday_calendar_test.dart       # 节假日日历：wire 格式 / 内置日历 / 存储 / AppState
+│   ├── holiday_sync_test.dart           # 节假日联网更新：解析 / 补班日推导 / 合并 / 失败结局
+│   ├── holiday_settings_test.dart       # 设置页与节假日页的交互（含联网更新按钮）
 │   ├── widget_service_test.dart         # 桌面小组件推送（通道形状 / 异常吞掉 / 平台开关）
+│   ├── widget_layout_whitelist_test.dart# 守住宿主 inflate：布局只能用 RemoteViews 白名单控件
 │   ├── webimport_jsdom_payload_test.dart # 抓取脚本真 DOM 载荷 → 解析（整页 vs 载荷 逐门比对）
 │   └── fixtures/
 │       ├── njtc_sample.xls              # 真实教务系统导出样例（回归固件）
@@ -324,11 +368,14 @@ njtc_schedule/
 │       └── extract_payload_jsdom.json   # 抓取脚本在真 DOM（jsdom）上跑出来的载荷
 ├── integration_test/
 │   ├── reminder_e2e_test.dart           # 真机端到端：排闹钟 → 发通知 → superx 字段
+│   ├── holiday_reminder_e2e_test.dart   # 真机端到端：放假日不排闹钟 / 补班日换周几排
 │   ├── web_import_e2e_test.dart         # 真机端到端：WebView 抓 DOM → 解析成课表
 │   ├── jwglxt_json_e2e_test.dart        # 真机端到端：WebView 打教务数据接口 → 解析成课表
-│   └── jwglxt_proxy_e2e_test.dart       # 真机端到端：反向代理形态（内江师范真实地址）
+│   ├── jwglxt_proxy_e2e_test.dart       # 真机端到端：反向代理形态（内江师范真实地址）
+│   └── widget_render_e2e_test.dart      # 真机端到端：把小组件「会画成什么样」问出来（探针）
 ├── tool/
-│   └── jwglxt_fixture_server.py         # 正方数据接口 + 反向代理固件服务（仅测试用）
+│   ├── jwglxt_fixture_server.py         # 正方数据接口 + 反向代理固件服务（仅测试用）
+│   └── make_widget_preview.py           # 生成小组件预览图（Pillow，纯离线）
 ├── screenshots/                         # 真机实测截图
 ├── android/                             # 平台工程（已生成）
 ├── preview.html                         # 免安装界面预览
@@ -344,9 +391,11 @@ Android SDK 36）上实测：
 
 - `flutter pub get` —— 依赖解析成功
 - `flutter analyze` —— **No issues found!**
-- `flutter test` —— **120 个用例全部通过**（课表解析 / 自带 `.xls` 读取器 / 正方 HTML 解析 /
-  网页导入解析链路 / 抓取脚本真 DOM 载荷回归 / 课表网格冲突并排 / 首页周次选择器 /
-  手动增删改课程 / 节次时间自定义 / 桌面小组件推送）
+- `flutter test` —— **196 个用例全部通过**（课表解析 / 自带 `.xls` 读取器 / 正方 HTML 解析 /
+  网页导入解析链路 / 抓取脚本真 DOM 载荷回归 / 课表网格冲突并排 / **连堂课块撑满所占节次** /
+  **显示开关（周六日、非本周课程）** / **节假日日历（放假日 / 补班日 / 持久化）** /
+  **节假日联网更新（真实接口返回体解析 / 补班日推导 / 按年份合并 / 启动静默同步的节流与保护）** /
+  首页周次选择器 / 手动增删改课程 / 节次时间自定义 / 桌面小组件推送 / 小组件布局白名单）
 - **抓取脚本 `EXTRACT_JS` 在真 DOM（jsdom）上跑通**：`node D:\DSH\_verify\verify_extract_pipeline.mjs`
   → 29 条断言全过；它跑出的载荷与「整页 HTML 直接解析」**逐门一致**（9 门课，
   课名/星期/节次/周次/单双周/教师/教室/课号/教学班全等，学期与专业也一致）
@@ -365,6 +414,34 @@ Android SDK 36）上实测：
   - **页面里有课也仍然优先打接口**（页面只渲染一屏时，接口给的才是整学期；
     接口失败会回落到页面 DOM，不会让用户空手而归）——这条曾经被写成死代码，见
     `BUILD_NOTES.md` §9.12 / §9.13。
+- **桌面小组件在真机上真的画出来了**（vivo V2520A / Android 17，v1.1.9）：
+  - 先在模拟器上用探针问出真因 —— `RemoteViews` 只允许白名单控件，布局里的裸 `<View>`
+    颜色条让宿主抛 `InflateException: Class not allowed to be inflated android.view.View`，
+    整块布局画不出来 ⇒ 桌面只剩一张白卡（1.1.6~1.1.8 一直如此）；
+  - 换成 `ImageView` 后，`integration_test/widget_render_e2e_test.dart` 在模拟器上
+    **`+2: All tests passed!`**，探针打出：
+    `{"date":"10月4日 周日","week":"第1周","footer":"共 2 门 · 点开看全部","emptyVisible":false,
+    "rows":["08:00-09:40 人工智能导论@明德楼B216","10:00-11:40 高等数学Ⅰ（上）@明德楼A203"]}`；
+  - 真机上装 1.1.9 后，手工广播刷新让 `dumpsys appwidget` 里我们的 `views=` 句柄从
+    `@f8038c6` 变成 `@ee520b5`（宿主收下新 RemoteViews、无 inflate 异常），
+    桌面截图显示 `10 月 4 日 周日 / 第 5 周 / 今天没课 / 今天没课，好好休息`
+    （见 `screenshots/widget_ok_real_device.png`，今天确实没课，判断是对的）。
+    白卡的真因、探针手法与教训见 `BUILD_NOTES.md` §9.14。
+- **连堂课块真的撑满它所占的节次**（v1.1.10 修的老 bug）：课表网格里课程块的高度
+  = `(endSection - startSection + 1) × sectionHeight`，`test/timetable_grid_test.dart`
+  新增三条用例**量像素**守住这条不变量（跨 4 小节 = 296px、跨 2 小节 = 148px）。
+  改之前实测分别只有 **42px / 61px** —— 卡片高度只跟文字几行有关，
+  于是「多节连堂的课在课表上只占一节」（用户 2026-10-04 反馈）。
+  根因是里层 `Stack` 用了默认的 `StackFit.loose`，见 `BUILD_NOTES.md` §9.15；
+  真实课表的渲染对照图见 `screenshots/grid_span_fix_110.png`。
+- **节假日 / 调休补班日真的会改闹钟**（v1.1.11）：
+  `integration_test/holiday_reminder_e2e_test.dart` 在模拟器（API 37）上
+  **`+1: All tests passed!`**，三个场景互为对照 ——
+  明天（2026-10-05 周一）标成放假日时 `scheduled=0 / next=-`（一个闹钟都不排）；
+  把「放假当天不提醒」关掉立刻回来（`next=2026-10-05(周一) 07:30`）；
+  把明天标成「按周二上课」的补班日后，提醒从 3 条变成 6 条、首个提醒从后天提前到明天。
+  钩子在原生 `ReminderScheduler.computeInstances()` 里（`continue` + `classDow`），见
+  `BUILD_NOTES.md` §9.16。
 - **`flutter build apk --release` 构建成功**（含全部 Kotlin 提醒引擎与 vivo 原子通知代码）
 - **`flutter build apk --release --split-per-abi` 构建成功**：
   `app-armeabi-v7a-release.apk`、`app-arm64-v8a-release.apk`、`app-x86_64-release.apk`

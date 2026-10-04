@@ -25,11 +25,19 @@ class TimetableGrid extends StatefulWidget {
   final int currentWeek;
   final void Function(Course course)? onCourseTap;
 
+  /// 是否画周六 / 周日两列（设置 → 课表显示 → 显示周六/周日）。
+  final bool showWeekend;
+
+  /// 是否把「不在当前周」的课程也画出来（半透明），默认只画本周要上的课。
+  final bool showInactiveCourses;
+
   const TimetableGrid({
     super.key,
     required this.timetable,
     required this.currentWeek,
     this.onCourseTap,
+    this.showWeekend = true,
+    this.showInactiveCourses = false,
   });
 
   @override
@@ -37,10 +45,14 @@ class TimetableGrid extends StatefulWidget {
 }
 
 class _TimetableGridState extends State<TimetableGrid> {
+  /// 一周七列；实际画几列看 [TimetableGrid.showWeekend]。
   static const int days = 7;
   static const double dayWidth = 118;
   static const double axisWidth = 54;
   static const double sectionHeight = 74;
+
+  /// 实际要画的列数：关掉周末就只画周一到周五。
+  int get _visibleDays => widget.showWeekend ? days : 5;
 
   /// 上午 / 下午 / 晚上的分界节次（在这些节次上方画一条淡分隔线）。
   static const List<int> _sessionStarts = [1, 5, 9];
@@ -79,7 +91,9 @@ class _TimetableGridState extends State<TimetableGrid> {
     final diff = today.difference(startDay).inDays;
     if (diff < 0) return null;
     if (diff ~/ 7 + 1 != widget.currentWeek) return null;
-    return now.weekday - 1;
+    final col = now.weekday - 1;
+    // 周末那两列被用户关掉时，今天不在画面上（否则会往看不见的列上滚）
+    return col < _visibleDays ? col : null;
   }
 
   /// 当前时刻在网格中的 y 坐标（不在上课时段就贴到相邻边界）。
@@ -124,7 +138,7 @@ class _TimetableGridState extends State<TimetableGrid> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildSectionAxis(sections),
-                  for (var d = 0; d < days; d++)
+                  for (var d = 0; d < _visibleDays; d++)
                     _buildDayColumn(
                       d,
                       sections,
@@ -157,12 +171,17 @@ class _TimetableGridState extends State<TimetableGrid> {
   // ============================ 布局计算 ============================
 
   /// 把当前周的课程排进「天 × 位置」；同一天内时间重叠的课程并排。
+  ///
+  /// 返回的列表固定按 7 天索引（下标 = dayOfWeek-1），画几列由调用方决定 ——
+  /// 这样关掉周末时不需要动任何下标换算。
   List<List<_Placed>> _layout() {
     final result = List.generate(days, (_) => <_Placed>[]);
     for (var d = 0; d < days; d++) {
       final list = widget.timetable.courses
           .where((c) =>
-              c.dayOfWeek == d + 1 && c.isActiveOnWeek(widget.currentWeek))
+              c.dayOfWeek == d + 1 &&
+              (c.isActiveOnWeek(widget.currentWeek) ||
+                  widget.showInactiveCourses))
           .toList()
         ..sort((a, b) {
           final s = a.startSection.compareTo(b.startSection);
@@ -213,6 +232,8 @@ class _TimetableGridState extends State<TimetableGrid> {
               left: laneOf[c]! * laneWidth,
               width: laneWidth,
               conflict: laneEnds.length > 1,
+              // 「本学期有、本周不上」的课只在用户要求时出现，画的时候要淡一点
+              active: c.isActiveOnWeek(widget.currentWeek),
             ),
           );
         }
@@ -228,7 +249,7 @@ class _TimetableGridState extends State<TimetableGrid> {
     return Row(
       children: [
         const SizedBox(width: axisWidth),
-        for (var d = 0; d < days; d++)
+        for (var d = 0; d < _visibleDays; d++)
           Container(
             width: dayWidth,
             height: 40,
@@ -366,14 +387,22 @@ class _TimetableGridState extends State<TimetableGrid> {
               left: p.left,
               width: p.width,
               height: p.height,
+              // fit: expand 不能省 —— 默认的 StackFit.loose 会把「宽高都是 0..span」
+              // 的松约束传给 CourseCard，卡片于是按内容自适应（实测只有 42~61px 高），
+              // 连堂课看起来就只占了一小节（用户 2026-10-04 反馈的那个 bug）。
               child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  CourseCard(
-                    course: p.course,
-                    color: AppTheme.colorForCourse(p.course.name),
-                    onTap: widget.onCourseTap == null
-                        ? null
-                        : () => widget.onCourseTap!(p.course),
+                  // 非本周课程（周次没到 / 单双周不对）半透明，一眼能看出「这周不上」
+                  Opacity(
+                    opacity: p.active ? 1.0 : 0.35,
+                    child: CourseCard(
+                      course: p.course,
+                      color: AppTheme.colorForCourse(p.course.name),
+                      onTap: widget.onCourseTap == null
+                          ? null
+                          : () => widget.onCourseTap!(p.course),
+                    ),
                   ),
                   if (p.course.oddEven != 0)
                     Positioned(
@@ -426,6 +455,7 @@ class _Placed {
     required this.left,
     required this.width,
     required this.conflict,
+    this.active = true,
   });
 
   final Course course;
@@ -436,4 +466,7 @@ class _Placed {
 
   /// 同一格是否还有其他冲突课程（并排显示）。
   final bool conflict;
+
+  /// 该课在当前周是否真的上（false = 只在「显示非本周课程」时画出来）。
+  final bool active;
 }

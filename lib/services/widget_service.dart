@@ -59,4 +59,23 @@ class WidgetService {
       await _channel.invokeMethod<bool>('refresh');
     } catch (_) {}
   }
+
+  /// 问原生「小组件现在实际会显示成什么样」。
+  ///
+  /// 原生侧会把 `widget_today` 布局真的 inflate 一遍再读回 TextView 的文字，
+  /// 所以这里拿到的是**渲染结果**，不是我们以为该显示什么。
+  /// 桌面上显示不对时用它取证；集成测试也靠它断言。
+  /// 拿不到（非 Android / 通道未注册）时返回 null。
+  static Future<Map<String, dynamic>?> probe() async {
+    if (!supported) return null;
+    try {
+      final r = await _channel.invokeMethod<Map<dynamic, dynamic>>('probe');
+      return r?.cast<String, dynamic>();
+    } catch (e) {
+      // 这里**不能**像 sync/refresh 那样闷掉：probe 是拿来查问题的，
+      // 查问题的人必须看得到原生侧到底报了什么。
+      debugPrint('WidgetService.probe 失败：$e');
+      return null;
+    }
+  }
 }

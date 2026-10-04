@@ -65,12 +65,20 @@ class ReminderPrefs {
   /// 因此默认开启是安全的。
   bool vivoAtomic;
 
+  /// 法定节假日 / 调休补班日是否生效。
+  ///
+  /// 开启时：放假那天**不排任何课程提醒**；调休补班日（如「周六补周三的课」）
+  /// 按对应周几的课表排提醒 —— 具体日期由「设置 → 法定节假日」里那份可编辑的
+  /// 日历决定（见 `lib/models/holiday_calendar.dart`）。
+  bool skipHolidays;
+
   ReminderPrefs({
     this.enabled = true,
     Set<int>? leadMinutes,
     this.endReminder = true,
     this.endPreviewMinutes = 5,
     this.vivoAtomic = true,
+    this.skipHolidays = true,
   }) : leadMinutes = leadMinutes == null
             ? {...defaultLeadMinutes}
             : leadMinutes.where(leadOptions.contains).toSet();
@@ -109,6 +117,7 @@ class ReminderPrefs {
       parts.add('提前 ${sortedLeads.join(' / ')} 分钟');
     }
     if (endReminder) parts.add('下课前 $endPreviewMinutes 分钟预告');
+    if (skipHolidays) parts.add('节假日不提醒');
     if (parts.isEmpty) return '未选择任何提醒';
     return parts.join(' · ');
   }
@@ -119,6 +128,7 @@ class ReminderPrefs {
     bool? endReminder,
     int? endPreviewMinutes,
     bool? vivoAtomic,
+    bool? skipHolidays,
   }) {
     return ReminderPrefs(
       enabled: enabled ?? this.enabled,
@@ -126,11 +136,13 @@ class ReminderPrefs {
       endReminder: endReminder ?? this.endReminder,
       endPreviewMinutes: endPreviewMinutes ?? this.endPreviewMinutes,
       vivoAtomic: vivoAtomic ?? this.vivoAtomic,
+      skipHolidays: skipHolidays ?? this.skipHolidays,
     );
   }
 
   @override
   String toString() =>
       'ReminderPrefs(enabled: $enabled, leads: $sortedLeads, '
-      'end: $endReminder, endPreview: $endPreviewMinutes, vivoAtomic: $vivoAtomic)';
+      'end: $endReminder, endPreview: $endPreviewMinutes, '
+      'vivoAtomic: $vivoAtomic, skipHolidays: $skipHolidays)';
 }

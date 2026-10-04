@@ -113,6 +113,12 @@ data class ReminderPlan(
     val periods: Map<Int, PeriodSlot>,
     val courses: List<ReminderCourse>,
     val prefs: ReminderPrefs,
+    /** 「节假日不提醒」开关（对应 Dart 侧 `ReminderPrefs.skipHolidays`）。 */
+    val skipHolidays: Boolean = true,
+    /** 放假日（epochDay，1970-01-01 为 0）。这些天整天不排提醒。 */
+    val holidays: Set<Long> = emptySet(),
+    /** 调休补班日：epochDay → 这天按周几的课表上课（1=周一 … 7=周日）。 */
+    val makeups: Map<Long, Int> = emptyMap(),
 ) {
     companion object {
         fun fromJson(json: JSONObject): ReminderPlan {
@@ -148,6 +154,21 @@ data class ReminderPlan(
                 )
             }
 
+            // 法定节假日 / 调休补班日（Dart 侧 HolidayCalendar 下发）
+            val holidays = mutableSetOf<Long>()
+            val holidaysJson = json.optJSONArray("holidays") ?: JSONArray()
+            for (i in 0 until holidaysJson.length()) {
+                holidays.add(holidaysJson.optLong(i))
+            }
+            val makeups = mutableMapOf<Long, Int>()
+            val makeupsJson = json.optJSONArray("makeups") ?: JSONArray()
+            for (i in 0 until makeupsJson.length()) {
+                val o = makeupsJson.optJSONObject(i) ?: continue
+                val day = o.optLong("epochDay", -1L)
+                val dow = o.optInt("weekday", 0)
+                if (day >= 0L && dow in 1..7) makeups[day] = dow
+            }
+
             val leadsJson = json.optJSONArray("leadMinutes") ?: JSONArray()
             val scopesJson = json.optJSONArray("leadScopes") ?: JSONArray()
             // 分钟数与作用范围必须成对排序，否则下标错位会导致「哪条提醒只对时段首课生效」判断错乱
@@ -171,6 +192,9 @@ data class ReminderPlan(
                     endPreviewMinutes = json.optInt("endPreviewMinutes", 5),
                     vivoAtomic = json.optBoolean("vivoAtomic", true),
                 ),
+                skipHolidays = json.optBoolean("skipHolidays", true),
+                holidays = holidays,
+                makeups = makeups,
             )
         }
     }

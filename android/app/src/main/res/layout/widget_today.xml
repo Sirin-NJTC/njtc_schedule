@@ -52,12 +52,20 @@
         android:orientation="horizontal"
         android:paddingTop="8dp">
 
-        <View
+        <!--
+          ⚠️ 这里必须是 RemoteViews 白名单里的控件。
+          原先写的是裸 `android.view.View`，宿主 inflate 时会抛
+          `InflateException: Class not allowed to be inflated android.view.View`，
+          整个小组件都画不出来 —— 这就是 v1.1.6~v1.1.8 真机白卡的真因。
+          ImageView 在白名单里，`setBackgroundColor`（代码里用它改颜色）照样有效。
+        -->
+        <ImageView
             android:id="@+id/bar_1"
             android:layout_width="3dp"
             android:layout_height="28dp"
             android:layout_marginEnd="8dp"
-            android:background="#6366F1" />
+            android:background="#6366F1"
+            android:contentDescription="@null" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -104,12 +112,13 @@
         android:orientation="horizontal"
         android:paddingTop="8dp">
 
-        <View
+        <ImageView
             android:id="@+id/bar_2"
             android:layout_width="3dp"
             android:layout_height="28dp"
             android:layout_marginEnd="8dp"
-            android:background="#6366F1" />
+            android:background="#6366F1"
+            android:contentDescription="@null" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -156,12 +165,13 @@
         android:orientation="horizontal"
         android:paddingTop="8dp">
 
-        <View
+        <ImageView
             android:id="@+id/bar_3"
             android:layout_width="3dp"
             android:layout_height="28dp"
             android:layout_marginEnd="8dp"
-            android:background="#6366F1" />
+            android:background="#6366F1"
+            android:contentDescription="@null" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -208,12 +218,13 @@
         android:orientation="horizontal"
         android:paddingTop="8dp">
 
-        <View
+        <ImageView
             android:id="@+id/bar_4"
             android:layout_width="3dp"
             android:layout_height="28dp"
             android:layout_marginEnd="8dp"
-            android:background="#6366F1" />
+            android:background="#6366F1"
+            android:contentDescription="@null" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -260,12 +271,13 @@
         android:orientation="horizontal"
         android:paddingTop="8dp">
 
-        <View
+        <ImageView
             android:id="@+id/bar_5"
             android:layout_width="3dp"
             android:layout_height="28dp"
             android:layout_marginEnd="8dp"
-            android:background="#6366F1" />
+            android:background="#6366F1"
+            android:contentDescription="@null" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -315,6 +327,11 @@
         android:textSize="12sp"
         android:visibility="gone" />
 
+    <!--
+      页脚：正常情况下由原生代码填（「今天没课，好好休息」/「共 N 门 · 点开看全部」…）。
+      这里留一句默认文字，是为了「App 还没同步过一次」那一小段时间里卡片上不是空白 ——
+      空白卡片用户只会当成坏了。
+    -->
     <TextView
         android:id="@+id/widget_footer"
         android:layout_width="match_parent"
@@ -322,6 +339,8 @@
         android:paddingTop="8dp"
         android:ellipsize="end"
         android:maxLines="1"
+        android:text="打开 App 同步课表"
         android:textColor="#9CA3AF"
         android:textSize="10sp" />
+
 </LinearLayout>

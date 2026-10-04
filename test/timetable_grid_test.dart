@@ -5,7 +5,8 @@
 /// * 节次总数自适应，第 11 节不能因为写死 `maxSection = 10` 而消失；
 /// * 单/双周课程要有角标；
 /// * 展示的正好是本周时，今天那一列的表头显示「今天」；
-/// * 不在本周的课程不出现。
+/// * 不在本周的课程默认不出现，打开「显示非本周课程」后半透明地出现；
+/// * 关掉「显示周六/周日」后只剩五列，周末的课也不再画。
 library;
 
 import 'package:flutter/material.dart';
@@ -49,7 +50,13 @@ Timetable tt(List<Course> courses, {DateTime? startDate, int totalWeeks = 20}) =
       courses: courses,
     );
 
-Future<void> pumpGrid(WidgetTester tester, Timetable timetable, int week) async {
+Future<void> pumpGrid(
+  WidgetTester tester,
+  Timetable timetable,
+  int week, {
+  bool showWeekend = true,
+  bool showInactiveCourses = false,
+}) async {
   // 手机宽度：7 天网格放不下，正好验证横向滚动 + 自动滚动到今天不崩
   tester.view.physicalSize = const Size(1200, 2000);
   tester.view.devicePixelRatio = 1.0;
@@ -58,7 +65,12 @@ Future<void> pumpGrid(WidgetTester tester, Timetable timetable, int week) async 
   await tester.pumpWidget(MaterialApp(
     theme: AppTheme.lightTheme,
     home: Scaffold(
-      body: TimetableGrid(timetable: timetable, currentWeek: week),
+      body: TimetableGrid(
+        timetable: timetable,
+        currentWeek: week,
+        showWeekend: showWeekend,
+        showInactiveCourses: showInactiveCourses,
+      ),
     ),
   ));
   await tester.pumpAndSettle();
@@ -167,6 +179,55 @@ void main() {
     });
   });
 
+  group('连堂课块撑满所占节次', () {
+    // 用户反馈：多节连堂的课在课表上只占一节课的位置。
+    // 课块外层的 Positioned 高度算的是「跨了几节」，但如果卡片自己不撑开，
+    // 看起来就只是一小节高 —— 这两条用例锁住「撑开」。
+    const double sectionHeight = 74; // 与 TimetableGrid.sectionHeight 一致
+
+    testWidgets('跨 4 小节（第 3-6 节）的卡片高度 = 4 个小节', (tester) async {
+      await pumpGrid(tester, tt([c(name: '连堂课', day: 1, start: 3, end: 6)]), 1);
+
+      final size = tester.getSize(find.byType(CourseCard));
+      expect(
+        size.height,
+        closeTo(4 * sectionHeight, 0.5),
+        reason: '连堂课要撑满 4 个小节；只有 ~1 个小节高就是用户看到的「只占一节」',
+      );
+    });
+
+    testWidgets('跨 2 小节（第 1-2 节）的卡片高度 = 2 个小节', (tester) async {
+      await pumpGrid(tester, tt([c(name: '普通课', day: 2, start: 1, end: 2)]), 1);
+
+      expect(
+        tester.getSize(find.byType(CourseCard)).height,
+        closeTo(2 * sectionHeight, 0.5),
+      );
+    });
+
+    testWidgets('并排冲突课也各自撑满高度', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '并排甲', day: 3, start: 5, end: 8),
+          c(name: '并排乙', day: 3, start: 5, end: 6),
+        ]),
+        1,
+      );
+
+      final cards = tester.widgetList<CourseCard>(find.byType(CourseCard)).toList();
+      expect(cards.length, 2);
+      // 按课名定位，别依赖绘制顺序（_layout 先按 startSection 再按 endSection 排序）
+      Size sizeOf(String name) => tester.getSize(
+            find.ancestor(of: find.text(name), matching: find.byType(CourseCard)),
+          );
+      expect(sizeOf('并排甲').height, closeTo(4 * sectionHeight, 0.5));
+      expect(sizeOf('并排乙').height, closeTo(2 * sectionHeight, 0.5));
+      // 并排时宽度均分
+      expect(sizeOf('并排甲').width, closeTo(sizeOf('并排乙').width, 0.5));
+    });
+  });
+
   group('今天高亮', () {
     testWidgets('展示本周时表头出现「今天」', (tester) async {
       final now = DateTime.now();
@@ -200,6 +261,101 @@ void main() {
 
       expect(find.text('今天'), findsNothing);
       expect(find.text('周一'), findsOneWidget);
+    });
+  });
+
+  group('显示开关：周六日', () {
+    testWidgets('默认显示七列（周一到周日）', (tester) async {
+      await pumpGrid(tester, tt([c(name: '周一的课', day: 1)]), 1);
+
+      expect(find.text('周六'), findsOneWidget);
+      expect(find.text('周日'), findsOneWidget);
+    });
+
+    testWidgets('关掉周末后只剩五列，周六的课也不见了', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '周一的课', day: 1, start: 1, end: 2),
+          c(name: '周六的课', day: 6, start: 1, end: 2),
+        ]),
+        1,
+        showWeekend: false,
+      );
+
+      expect(find.text('周一'), findsOneWidget);
+      expect(find.text('周五'), findsOneWidget);
+      expect(find.text('周六'), findsNothing);
+      expect(find.text('周日'), findsNothing);
+      expect(find.text('周一的课'), findsOneWidget);
+      expect(find.text('周六的课'), findsNothing);
+    });
+  });
+
+  group('显示开关：非本周课程', () {
+    testWidgets('默认只画本周要上的课', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '第1周才上', day: 2, start: 1, end: 2, startWeek: 1, endWeek: 4),
+          c(name: '第9周上', day: 2, start: 3, end: 4, startWeek: 7, endWeek: 12),
+        ]),
+        9,
+      );
+
+      expect(find.text('第9周上'), findsOneWidget);
+      expect(find.text('第1周才上'), findsNothing);
+    });
+
+    testWidgets('打开后非本周课程半透明地画出来', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '第1周才上', day: 2, start: 1, end: 2, startWeek: 1, endWeek: 4),
+          c(name: '第9周上', day: 2, start: 3, end: 4, startWeek: 7, endWeek: 12),
+        ]),
+        9,
+        showInactiveCourses: true,
+      );
+
+      expect(find.text('第9周上'), findsOneWidget);
+      expect(find.text('第1周才上'), findsOneWidget);
+
+      // 非本周的那门要淡一点（否则用户分不清哪门这周真要上）
+      List<double> opacitiesOf(String name) => tester
+          .widgetList<Opacity>(find.ancestor(
+            of: find.text(name),
+            matching: find.byType(Opacity),
+          ))
+          .map((o) => o.opacity)
+          .toList();
+
+      // 不按下标认对象：find.ancestor 的顺序不做保证，只断言「存在某层是目标透明度」
+      expect(opacitiesOf('第9周上'), contains(1.0));
+      expect(opacitiesOf('第1周才上'), contains(closeTo(0.35, 0.001)));
+    });
+
+    testWidgets('单双周不匹配的课也算非本周', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '单周课', day: 3, start: 1, end: 2, oddEven: 1),
+          c(name: '双周课', day: 3, start: 3, end: 4, oddEven: 2),
+        ]),
+        2, // 第 2 周是双周
+        showInactiveCourses: true,
+      );
+
+      expect(find.text('双周课'), findsOneWidget);
+      expect(find.text('单周课'), findsOneWidget);
+      final opacities = tester
+          .widgetList<Opacity>(find.ancestor(
+            of: find.text('单周课'),
+            matching: find.byType(Opacity),
+          ))
+          .map((o) => o.opacity)
+          .toList();
+      expect(opacities, contains(closeTo(0.35, 0.001)));
     });
   });
 }

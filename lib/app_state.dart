@@ -5,11 +5,16 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/display_prefs.dart';
+import '../models/holiday_calendar.dart';
 import '../models/period.dart';
 import '../models/reminder_prefs.dart';
 import '../models/timetable.dart';
+import '../services/holiday_sync_service.dart';
 import '../services/reminder_service.dart';
 import '../services/widget_service.dart';
+import '../storage/display_store.dart';
+import '../storage/holiday_store.dart';
 import '../storage/period_store.dart';
 import '../storage/reminder_store.dart';
 import '../storage/timetable_store.dart';
@@ -26,10 +31,23 @@ class AppState extends ChangeNotifier {
   ReminderSyncResult? _lastSync;
   bool _syncing = false;
 
+  DisplayPrefs _displayPrefs = DisplayPrefs();
+  HolidayCalendar _holidays = HolidayCalendar.builtin();
+  HolidayMeta _holidayMeta = const HolidayMeta();
+
   List<Timetable> get timetables => _timetables;
   Timetable? get active => _active;
   int get currentWeek => _currentWeek;
   bool get loaded => _loaded;
+
+  /// 课表显示偏好（周六日 / 非本周课程）。
+  DisplayPrefs get displayPrefs => _displayPrefs;
+
+  /// 法定节假日 + 调休补班日日历（提醒排布要用）。
+  HolidayCalendar get holidays => _holidays;
+
+  /// 这份日历哪来的（内置 / 联网 / 手动）与上次联网更新时间。
+  HolidayMeta get holidayMeta => _holidayMeta;
 
   /// 提醒偏好。
   ReminderPrefs get reminderPrefs => _reminderPrefs;
@@ -58,6 +76,9 @@ class AppState extends ChangeNotifier {
     _timetables = await TimetableStore.loadAll();
     _active = await TimetableStore.loadActive();
     _reminderPrefs = await ReminderStore.load();
+    _displayPrefs = await DisplayStore.load();
+    _holidays = await HolidayStore.load();
+    _holidayMeta = await HolidayStore.loadMeta();
     // 节次时间要在 syncReminders() 之前就位：提醒排布是拿这份时间算的
     final savedPeriods = await PeriodStore.load();
     if (savedPeriods != null) {
@@ -76,6 +97,23 @@ class AppState extends ChangeNotifier {
     // 桌面小组件也同步一份（它可能在 App 没启动时就被系统唤醒去画）。
     // 同样不 await：见 _syncAfterChange 里的说明。
     unawaited(WidgetService.sync(timetable: _active));
+    // 节假日日历：从没联网更新过、或距上次超过 30 天就静默试一次。
+    // 不 await（不能拖慢启动），失败什么都不改；测试环境不联网。
+    if (HolidaySyncService.autoSyncEnabled && _shouldAutoSyncHolidays()) {
+      unawaited(syncHolidaysFromNetwork(silent: true));
+    }
+  }
+
+  /// 该不该自动联网更新节假日日历。
+  ///
+  /// ⚠️ **手动改过的日历不自动覆盖**：用户在节假日页删/加的日子是他的选择，
+  /// 启动时悄悄换掉比不更新更糟。想强制更新就点页面上的「立即联网更新」。
+  bool _shouldAutoSyncHolidays() {
+    if (_holidayMeta.source == HolidayStore.sourceManual) return false;
+    if (_holidayMeta.source != HolidayStore.sourceNet) return true;
+    final at = _holidayMeta.updatedAt;
+    if (at == null) return true;
+    return DateTime.now().difference(at) > const Duration(days: 30);
   }
 
   /// 自动检测当前教学周。
@@ -203,6 +241,81 @@ class AppState extends ChangeNotifier {
     await _syncAfterChange();
   }
 
+  // ------------------------------------------------------------ 课表显示
+
+  /// 更新课表显示偏好（周六日 / 非本周课程）。
+  ///
+  /// 纯展示开关，与提醒排布无关，因此不需要重排闹钟，只通知界面重画。
+  Future<void> updateDisplayPrefs(DisplayPrefs prefs) async {
+    _displayPrefs = prefs;
+    await DisplayStore.save(prefs);
+    notifyListeners();
+  }
+
+  // ------------------------------------------------------------ 节假日
+
+  /// 更新法定节假日 / 调休补班日日历，并立即重排提醒。
+  ///
+  /// 必须重排：放假意味着那几天不该有闹钟，改完日历不重排就还是按旧日历响。
+  ///
+  /// [source] 记录这份日历怎么来的（[HolidayStore.sourceManual] /
+  /// [HolidayStore.sourceNet] / [HolidayStore.sourceBuiltin]），设置页据此显示
+  /// 「数据来源」。
+  Future<ReminderSyncResult> updateHolidays(
+    HolidayCalendar calendar, {
+    String source = HolidayStore.sourceManual,
+    DateTime? updatedAt,
+  }) async {
+    _holidays = calendar.sorted();
+    await HolidayStore.save(_holidays);
+    await _saveHolidayMeta(source: source, updatedAt: updatedAt);
+    notifyListeners();
+    return syncReminders();
+  }
+
+  /// 恢复内置的那份节假日日历。
+  Future<ReminderSyncResult> resetHolidays() async {
+    await HolidayStore.clear();
+    _holidays = HolidayCalendar.builtin();
+    await _saveHolidayMeta(source: HolidayStore.sourceBuiltin);
+    notifyListeners();
+    return syncReminders();
+  }
+
+  /// 联网更新法定节假日 / 调休补班日日历。
+  ///
+  /// 不抛异常：失败时 [HolidaySyncOutcome.ok] 为 false、日历原样不动，调用方
+  /// 把 [HolidaySyncOutcome.note] 显示给用户即可。[silent] 为 true 时（启动时
+  /// 的静默同步）连界面提示都不做。
+  Future<HolidaySyncOutcome> syncHolidaysFromNetwork({bool silent = false}) async {
+    final outcome = await HolidaySyncService.update(_holidays);
+    // 真机取证的唯一线索：logcat 里能看到这次联网到底成不成、拿到多少天。
+    debugPrint(
+      'HolidaySync: ok=${outcome.ok} note=${outcome.note} '
+      '放假=${outcome.calendar.holidays.length} 补班=${outcome.calendar.makeups.length} '
+      'silent=$silent',
+    );
+    if (!outcome.ok) return outcome;
+    _holidays = outcome.calendar;
+    await HolidayStore.save(_holidays);
+    await _saveHolidayMeta(
+      source: HolidayStore.sourceNet,
+      updatedAt: DateTime.now(),
+    );
+    if (!silent) notifyListeners();
+    // 静默同步也要重排：新拿到的放假日必须真的从闹钟里去掉。
+    await syncReminders();
+    return outcome;
+  }
+
+  Future<void> _saveHolidayMeta({
+    required String source,
+    DateTime? updatedAt,
+  }) async {
+    _holidayMeta = HolidayMeta(source: source, updatedAt: updatedAt);
+    await HolidayStore.saveMeta(source: source, updatedAt: updatedAt);
+  }
+
   // ------------------------------------------------------------ 课程提醒
 
   /// 更新提醒偏好并立即重排。
@@ -241,7 +354,8 @@ class AppState extends ChangeNotifier {
         return _lastSync!;
       }
 
-      final payload = ReminderService.buildPlanPayload(tt, _reminderPrefs);
+      final payload =
+          ReminderService.buildPlanPayload(tt, _reminderPrefs, _holidays);
       if (payload == null) {
         // 没有学期起始日期时无法计算「第几周」，排布出来的提醒会永远按第 1 周重复。
         await ReminderService.cancelAll();

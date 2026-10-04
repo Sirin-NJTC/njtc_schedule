@@ -13,6 +13,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/services.dart';
 
 import '../models/course.dart';
+import '../models/holiday_calendar.dart';
 import '../models/period.dart';
 import '../models/reminder_prefs.dart';
 import '../models/timetable.dart';
@@ -367,13 +368,18 @@ class ReminderService {
   /// - 提前 15 分钟 → 仅上午/下午/晚上第一节，单节课提醒；
   /// - 提前 5 分钟 → 当天每一节课；
   /// - 下课前 `endPreviewMinutes` 分钟 → 预告下一节课，**连堂不提醒**。
+  ///
+  /// [holidays] 是法定节假日 / 调休补班日日历：开启「节假日不提醒」后，
+  /// 放假日整天不排提醒；补班日按日历指定的周几排提醒（如「周六补周三的课」）。
   static Map<String, dynamic>? buildPlanPayload(
     Timetable timetable,
-    ReminderPrefs prefs,
-  ) {
+    ReminderPrefs prefs, [
+    HolidayCalendar? holidays,
+  ]) {
     final start = timetable.startDate;
     if (start == null) return null;
 
+    final calendar = holidays ?? const HolidayCalendar();
     final leads = prefs.sortedLeads;
     return <String, dynamic>{
       'enabled': prefs.enabled,
@@ -383,6 +389,10 @@ class ReminderService {
       'endReminder': prefs.endReminder,
       'endPreviewMinutes': prefs.endPreviewMinutes,
       'vivoAtomic': prefs.vivoAtomic,
+      // 节假日开关只影响这两项是否被原生侧采用；日历本身照发，方便改开关后立刻生效
+      'skipHolidays': prefs.skipHolidays,
+      'holidays': calendar.holidayEpochDays.toList()..sort(),
+      'makeups': calendar.makeupPayload(),
       'semesterStartEpochDay': _epochDay(start),
       'totalWeeks': timetable.totalWeeks,
       'periods': activePeriods

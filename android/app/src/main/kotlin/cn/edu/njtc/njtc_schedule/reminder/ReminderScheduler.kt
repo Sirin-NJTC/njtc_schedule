@@ -174,9 +174,15 @@ object ReminderScheduler {
             val isoDow = DayMath.isoDayOfWeek(dayMidnight, tz)
             val epochDay = DayMath.localMillisToEpochDay(dayMidnight, tz)
 
+            // 法定节假日：整天不排提醒（「节假日不提醒」开关关掉时日历不生效）。
+            if (plan.skipHolidays && plan.holidays.contains(epochDay)) continue
+            // 调休补班：这天按「补的是周几」的课表上课（如周六补周三的课）。
+            // 它与上面的开关无关 —— 补班修正的是「今天到底上周几的课」，不是放不放假。
+            val classDow = plan.makeups[epochDay] ?: isoDow
+
             // 当天该周实际要上的课，按节次排序 —— 「下一节课」「时段首课」都基于这份列表
             val dayCourses = plan.courses.withIndex()
-                .filter { (_, c) -> c.dayOfWeek == isoDow && c.isActiveOnWeek(week) }
+                .filter { (_, c) -> c.dayOfWeek == classDow && c.isActiveOnWeek(week) }
                 .sortedWith(
                     compareBy({ it.value.startSection }, { it.value.endSection }, { it.value.name }),
                 )

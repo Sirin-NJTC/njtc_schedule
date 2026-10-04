@@ -1,7 +1,7 @@
 name: njtc_schedule
 description: 内江师范学院课程表 - 美观的课程表应用，支持教务系统导入
 publish_to: 'none'
-version: 1.1.8+10
+version: 1.1.12+14
 
 environment:
   sdk: '>=3.6.0 <4.0.0'

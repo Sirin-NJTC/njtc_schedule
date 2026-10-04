@@ -3,11 +3,19 @@
   小组件的元信息。
   updatePeriodMillis 最小就是 30 分钟（再小系统会忽略），这里靠它兜底跨零点；
   真正的即时刷新走 TodayWidgetProvider.ACTION_REFRESH（App 侧改完课表主动喊）。
+
+  previewLayout / previewImage 都是给「添加小组件」界面看的：
+  - previewLayout（API 31+ 优先用）：一份自包含的静态示例布局，见 widget_today_preview.xml；
+  - previewImage（老系统只有这个）：一张静态示意图 PNG。
+  两个都留上，是因为少了它们的后果正是「添加界面一张白卡」——真实布局的文字全由代码填，
+  系统拿它当预览时没人填，用户就只能看到白板（v1.1.8 的实况）。
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/widget_today"
     android:minHeight="110dp"
     android:minWidth="250dp"
+    android:previewImage="@drawable/widget_preview"
+    android:previewLayout="@layout/widget_today_preview"
     android:resizeMode="horizontal|vertical"
     android:targetCellHeight="2"
     android:targetCellWidth="4"
