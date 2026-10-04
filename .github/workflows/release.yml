@@ -1,0 +1,86 @@
+name: 发布 Release
+
+# 打 v* 标签（或在网页上手动 Run workflow）就会：跑检查与测试 → 构建四个 APK → 建/更新同名 Release 并挂上安装包。
+# 因为 android/app/build.gradle.kts 里 release 用的是 debug 签名，产物可以直接装，但不能上架。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建并发布
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取源码
+        uses: actions/checkout@v4
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: 安装 Flutter（与本地验证过的版本一致）
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.6
+          channel: stable
+          cache: true
+
+      - name: 准备 Android SDK 组件
+        run: |
+          set -x
+          sdkmanager --licenses > /dev/null 2>&1 <<< "y" || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" > /dev/null || true
+
+      - name: 拉依赖
+        run: flutter pub get
+
+      - name: 静态检查
+        run: flutter analyze
+
+      - name: 单元测试 / 组件测试
+        run: flutter test --reporter compact
+
+      - name: 构建（分 ABI）
+        run: flutter build apk --release --split-per-abi
+
+      - name: 构建（universal）
+        run: flutter build apk --release
+
+      - name: 看看产出了什么
+        run: ls -lh build/app/outputs/flutter-apk/
+
+      - name: 建 Release 并上传安装包
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 内师课程表 ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            ## 装哪个
+
+            直接下 **arm64-v8a** 那个（近几年的手机基本都是 arm64）；不确定就用 universal。
+
+            | 文件 | 给谁用 |
+            | --- | --- |
+            | `app-arm64-v8a-release.apk` | 绝大多数真机，首选 |
+            | `app-armeabi-v7a-release.apk` | 2016 年前后的老机器 |
+            | `app-x86_64-release.apk` | 模拟器 / 安卓子系统 |
+            | `app-release.apk` | 不确定机型时用（四个架构都含，体积最大） |
+
+            安装：浏览器下载 → 允许「安装未知应用」→ 安装。旧版本直接覆盖安装，课表和提醒设置都会保留。
+
+            > ⚠️ 这些包用的是 **debug 签名**，可以自己装、发给同学装；**不能上架应用商店**（上架要换成你自己的 release 签名，见 `BUILD_NOTES.md`）。
+
+            源码、构建说明、vivo 原子通知（原子岛）接入记录都在仓库里：`README.md` / `BUILD_NOTES.md` / `VIVO_ATOMIC_NOTIFICATION.md`。
+          files: |
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            build/app/outputs/flutter-apk/app-x86_64-release.apk
+            build/app/outputs/flutter-apk/app-release.apk
+          fail_on_unmatched_files: true
