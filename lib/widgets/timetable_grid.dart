@@ -14,10 +14,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../models/course.dart';
+import '../models/holiday_calendar.dart';
 import '../models/period.dart';
+import '../models/semester.dart';
 import '../models/timetable.dart';
 import '../theme.dart';
 import 'course_card.dart';
+import 'minute_ticker.dart';
 
 /// 课程表网格（周一到周日 × 节次）。
 class TimetableGrid extends StatefulWidget {
@@ -31,6 +34,13 @@ class TimetableGrid extends StatefulWidget {
   /// 是否把「不在当前周」的课程也画出来（半透明），默认只画本周要上的课。
   final bool showInactiveCourses;
 
+  /// 法定节假日 / 调休补班日日历。
+  ///
+  /// 放假那天的课程按「不上」处理（半透明，与「非本周课程」同款视觉）；
+  /// 补班日（如「周六补周三的课」）显示被补星期的课程，表头加「补」角标。
+  /// 默认空日历 = 旧行为，方便不关心节假别的调用方与既有测试。
+  final HolidayCalendar holidays;
+
   const TimetableGrid({
     super.key,
     required this.timetable,
@@ -38,6 +48,7 @@ class TimetableGrid extends StatefulWidget {
     this.onCourseTap,
     this.showWeekend = true,
     this.showInactiveCourses = false,
+    this.holidays = const HolidayCalendar(),
   });
 
   @override
@@ -73,6 +84,12 @@ class _TimetableGridState extends State<TimetableGrid> {
   }
 
   /// 需要展示的节次总数：标准作息表节数，或课程实际用到的最大节次。
+  ///
+  /// 这里刻意**不做缓存**：`Timetable` 是可变对象，`updateTimetable(tt)` 传进来的
+  /// 往往是同一个实例，靠 `identityHashCode` + 课程条数做指纹会在「改了某门课的
+  /// 时间但课程数不变」时漏掉失效，结果课表改了网格不刷新 —— 得不偿失。
+  /// 何况 [MinuteTicker] 只重建它自己那棵子树，并不会带动整张网格 rebuild，
+  /// 全量重排本来就只在切周 / 改课表 / 切显示开关时发生。
   int get _sectionCount {
     var maxSection = activePeriods.length;
     for (final c in widget.timetable.courses) {
@@ -85,20 +102,29 @@ class _TimetableGridState extends State<TimetableGrid> {
   int? get _todayColumn {
     final start = widget.timetable.startDate;
     if (start == null) return null;
-    final startDay = DateTime(start.year, start.month, start.day);
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final diff = today.difference(startDay).inDays;
-    if (diff < 0) return null;
-    if (diff ~/ 7 + 1 != widget.currentWeek) return null;
+    // 学期还没开始，画面上就没有「今天」可言
+    if (epochDayOf(now) < epochDayOf(start)) return null;
+    // 周次判断统一走 weekOfSemester：这里原先另抄了一份 difference().inDays，
+    // 和 AppState 那份写法不同，startDate 带时间分量时两边会算出不同的周
+    if (weekOfSemester(
+          startDate: start,
+          day: now,
+          totalWeeks: widget.timetable.totalWeeks,
+        ) !=
+        widget.currentWeek) {
+      return null;
+    }
     final col = now.weekday - 1;
     // 周末那两列被用户关掉时，今天不在画面上（否则会往看不见的列上滚）
     return col < _visibleDays ? col : null;
   }
 
-  /// 当前时刻在网格中的 y 坐标（不在上课时段就贴到相邻边界）。
-  double? _nowLineY() {
-    final now = DateTime.now();
+  /// [now] 时刻在网格中的 y 坐标（不在上课时段就贴到相邻边界）。
+  ///
+  /// [now] 由 [MinuteTicker] 递进来；不自己读 `DateTime.now()`，
+  /// 否则红线画出来就再也不动了。
+  double? _nowLineY(DateTime now) {
     final mins = now.hour * 60 + now.minute;
     for (final p in activePeriods) {
       final start = p.startHour * 60 + p.startMinute;
@@ -144,7 +170,6 @@ class _TimetableGridState extends State<TimetableGrid> {
                       sections,
                       placed[d],
                       isToday: today == d,
-                      nowY: today == d ? _nowLineY() : null,
                     ),
                 ],
               ),
@@ -170,18 +195,52 @@ class _TimetableGridState extends State<TimetableGrid> {
 
   // ============================ 布局计算 ============================
 
+  /// 一列的节假日元信息（由该列的日期对照 [widget.holidays] 算出）。
+  ///
+  /// [effectiveDow] 是这列**实际按星期几的课表上**：补班日取日历指定的星期，
+  /// 其余取列本身的星期。放假日本身的课全按「不上」处理（[holiday] = true）。
+  static const List<String> _dowLabels = ['一', '二', '三', '四', '五', '六', '日'];
+
+  _DayMeta _dayMeta(int d) {
+    final start = widget.timetable.startDate;
+    if (start == null) {
+      return _DayMeta(effectiveDow: d + 1, holiday: false, makeupDow: null);
+    }
+    final epochDay = epochDayOf(start) + (widget.currentWeek - 1) * 7 + d;
+    final holiday = widget.holidays.holidayEpochDays.contains(epochDay);
+    final makeup = holiday ? null : widget.holidays.makeupEpochDays[epochDay];
+    return _DayMeta(
+      effectiveDow: makeup ?? d + 1,
+      holiday: holiday,
+      makeupDow: makeup,
+    );
+  }
+
   /// 把当前周的课程排进「天 × 位置」；同一天内时间重叠的课程并排。
   ///
   /// 返回的列表固定按 7 天索引（下标 = dayOfWeek-1），画几列由调用方决定 ——
   /// 这样关掉周末时不需要动任何下标换算。
+  ///
+  /// 每列的「今天到底上哪些课」由 [_dayMeta] 决定：
+  /// 放假日 → 本列原有的课全算「不上」（半透明，受 showInactiveCourses 控制）；
+  /// 补班日 → 画**被补星期**的课（正常不透明），列本身的课算「不上」。
   List<List<_Placed>> _layout() {
     final result = List.generate(days, (_) => <_Placed>[]);
     for (var d = 0; d < days; d++) {
+      final meta = _dayMeta(d);
+      final nativeDow = d + 1;
       final list = widget.timetable.courses
-          .where((c) =>
-              c.dayOfWeek == d + 1 &&
-              (c.isActiveOnWeek(widget.currentWeek) ||
-                  widget.showInactiveCourses))
+          .where((c) {
+            // 放进本列的课：要么是有效星期（含补班）的课，要么是列本身的课
+            if (c.dayOfWeek != meta.effectiveDow && c.dayOfWeek != nativeDow) {
+              return false;
+            }
+            // 「这列真要上」的课，或用户开了「显示非本周课程」
+            final active = !meta.holiday &&
+                c.dayOfWeek == meta.effectiveDow &&
+                c.isActiveOnWeek(widget.currentWeek);
+            return active || widget.showInactiveCourses;
+          })
           .toList()
         ..sort((a, b) {
           final s = a.startSection.compareTo(b.startSection);
@@ -232,8 +291,11 @@ class _TimetableGridState extends State<TimetableGrid> {
               left: laneOf[c]! * laneWidth,
               width: laneWidth,
               conflict: laneEnds.length > 1,
-              // 「本学期有、本周不上」的课只在用户要求时出现，画的时候要淡一点
-              active: c.isActiveOnWeek(widget.currentWeek),
+              // 「这列真要上」= 不是放假日、是有效星期（含补班）的课、且本周上。
+              // 其余（放假日的课、补班日列本身的课、非本周）都画淡一点
+              active: !meta.holiday &&
+                  c.dayOfWeek == meta.effectiveDow &&
+                  c.isActiveOnWeek(widget.currentWeek),
             ),
           );
         }
@@ -261,21 +323,45 @@ class _TimetableGridState extends State<TimetableGrid> {
               borderRadius: BorderRadius.circular(10),
             ),
             alignment: Alignment.center,
-            child: Text(
-              d == today
-                  ? '今天'
-                  : '周${['一', '二', '三', '四', '五', '六', '日'][d]}',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: today == d
-                    ? Colors.white
-                    : (d >= 5 ? AppTheme.accent : AppTheme.textPrimary),
-              ),
-            ),
+            child: _headerContent(d, today == d),
           ),
       ],
     );
   }
+
+  /// 表头一格的内容：正常就是周几；放假日/补班日在下面加一行小字说明。
+  Widget _headerContent(int d, bool isToday) {
+    final meta = _dayMeta(d);
+    final main = isToday ? '今天' : '周${_dowLabels[d]}';
+    final style = TextStyle(
+      fontWeight: FontWeight.bold,
+      color: isToday ? Colors.white : _headerTextColor(d),
+    );
+    if (!meta.holiday && meta.makeupDow == null) {
+      return Text(main, style: style);
+    }
+    final sub = meta.holiday
+        ? '放假'
+        : '补周${_dowLabels[meta.makeupDow! - 1]}';
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(main, style: style),
+        const SizedBox(height: 1),
+        Text(
+          sub,
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            color: isToday ? Colors.white70 : AppTheme.primary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 非今天列的表头文字颜色（周末用强调色，与旧行为一致）。
+  Color _headerTextColor(int d) => d >= 5 ? AppTheme.accent : AppTheme.textPrimary;
 
   Widget _buildSectionAxis(int sections) {
     return SizedBox(
@@ -340,7 +426,6 @@ class _TimetableGridState extends State<TimetableGrid> {
     int sections,
     List<_Placed> placed, {
     required bool isToday,
-    double? nowY,
   }) {
     return SizedBox(
       width: dayWidth,
@@ -416,27 +501,43 @@ class _TimetableGridState extends State<TimetableGrid> {
                 ],
               ),
             ),
-          // 当前时间线
-          if (nowY != null)
-            Positioned(
-              top: nowY.clamp(0.0, sections * sectionHeight - 2),
-              left: 0,
-              right: 0,
+          // 当前时间线：每分钟自己往下挪，不再画一次就定住。
+          //
+          // 用 `Positioned.fill` + `Transform.translate` 而不是直接改 `Positioned`
+          // 的 top —— Stack 只认**直接**的 Positioned 子节点，中间隔一层
+          // MinuteTicker 它就不当定位元素了，会整块跑到左上角去。
+          if (isToday)
+            Positioned.fill(
               child: IgnorePointer(
-                child: Row(
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFEF4444),
-                        shape: BoxShape.circle,
+                child: MinuteTicker(
+                  builder: (_, now) {
+                    final y = _nowLineY(now);
+                    if (y == null) return const SizedBox.shrink();
+                    return Transform.translate(
+                      offset: Offset(
+                        0,
+                        y.clamp(0.0, sections * sectionHeight - 2),
                       ),
-                    ),
-                    Expanded(
-                      child: Container(height: 1.5, color: const Color(0xFFEF4444)),
-                    ),
-                  ],
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFEF4444),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          Expanded(
+                            child: Container(
+                              height: 1.5,
+                              color: const Color(0xFFEF4444),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -469,4 +570,22 @@ class _Placed {
 
   /// 该课在当前周是否真的上（false = 只在「显示非本周课程」时画出来）。
   final bool active;
+}
+
+/// 一列的节假日元信息。
+class _DayMeta {
+  const _DayMeta({
+    required this.effectiveDow,
+    required this.holiday,
+    required this.makeupDow,
+  });
+
+  /// 这列实际按星期几的课表上（补班日 = 日历指定的星期，其余 = 列本身）。
+  final int effectiveDow;
+
+  /// 这列是否放假日（本身的课全按「不上」处理）。
+  final bool holiday;
+
+  /// 这列是补班日时「按周几上课」；非补班日为 null。
+  final int? makeupDow;
 }

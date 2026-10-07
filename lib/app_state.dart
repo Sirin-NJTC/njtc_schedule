@@ -9,6 +9,7 @@ import '../models/display_prefs.dart';
 import '../models/holiday_calendar.dart';
 import '../models/period.dart';
 import '../models/reminder_prefs.dart';
+import '../models/semester.dart';
 import '../models/timetable.dart';
 import '../services/holiday_sync_service.dart';
 import '../services/reminder_service.dart';
@@ -74,7 +75,10 @@ class AppState extends ChangeNotifier {
   /// 初始化，从本地加载。
   Future<void> init() async {
     _timetables = await TimetableStore.loadAll();
-    _active = await TimetableStore.loadActive();
+    // 只取激活 id 再在已加载的列表里找 —— 不要调 loadActive()，
+    // 那个方法内部会再 parse 一遍全部课表 JSON（启动时等于解析两遍）。
+    final activeId = await TimetableStore.getActiveId();
+    _active = _activeIn(_timetables, activeId);
     _reminderPrefs = await ReminderStore.load();
     _displayPrefs = await DisplayStore.load();
     _holidays = await HolidayStore.load();
@@ -96,7 +100,7 @@ class AppState extends ChangeNotifier {
     await syncReminders();
     // 桌面小组件也同步一份（它可能在 App 没启动时就被系统唤醒去画）。
     // 同样不 await：见 _syncAfterChange 里的说明。
-    unawaited(WidgetService.sync(timetable: _active));
+    unawaited(WidgetService.sync(timetable: _active, holidays: _holidays));
     // 节假日日历：从没联网更新过、或距上次超过 30 天就静默试一次。
     // 不 await（不能拖慢启动），失败什么都不改；测试环境不联网。
     if (HolidaySyncService.autoSyncEnabled && _shouldAutoSyncHolidays()) {
@@ -117,22 +121,31 @@ class AppState extends ChangeNotifier {
   }
 
   /// 自动检测当前教学周。
+  ///
+  /// 算法统一走 [weekOfSemester]（epochDay 相减），不要在这里手写
+  /// `difference().inDays` —— 首页与网格另有一份，写两遍迟早分叉。
   void _autoDetectWeek() {
-    if (_active == null || _active!.startDate == null) {
+    final tt = _active;
+    if (tt == null) {
       _currentWeek = 1;
       return;
     }
-    final start = _active!.startDate!;
-    final now = DateTime.now();
-    final diff = now.difference(start).inDays;
-    final week = (diff ~/ 7) + 1;
-    if (week < 1) {
-      _currentWeek = 1;
-    } else if (week > _active!.totalWeeks) {
-      _currentWeek = _active!.totalWeeks;
-    } else {
-      _currentWeek = week;
+    _currentWeek = weekOfSemester(
+          startDate: tt.startDate,
+          day: DateTime.now(),
+          totalWeeks: tt.totalWeeks,
+        ) ??
+        1;
+  }
+
+  /// 在已加载的课表里挑出激活的那份；找不到就回落第一份。
+  static Timetable? _activeIn(List<Timetable> all, String? id) {
+    if (id != null) {
+      for (final t in all) {
+        if (t.id == id) return t;
+      }
     }
+    return all.isNotEmpty ? all.first : null;
   }
 
   /// 切换当前周。
@@ -179,10 +192,16 @@ class AppState extends ChangeNotifier {
     _timetables.removeWhere((e) => e.id == id);
     await TimetableStore.delete(id);
     if (_active?.id == id) {
-      _active = _timetables.isNotEmpty ? _timetables.first : null;
+      _active = _activeIn(_timetables, null);
       if (_active != null) {
         await TimetableStore.setActive(_active!.id);
+      } else {
+        // 一份都不剩了：把激活记录一起清掉，否则下次启动会拿一个不存在的 id
+        await TimetableStore.clearActive();
       }
+      // 换了课表就要按新课表重算周次 —— 漏掉这行的话，新课表 totalWeeks
+      // 更小时 _currentWeek 会停在越界的周上（setActive 里是有重算的）。
+      _autoDetectWeek();
     }
     notifyListeners();
     await _syncAfterChange();
@@ -381,7 +400,7 @@ class AppState extends ChangeNotifier {
     // 在 widget 测试里没有桩时那个 Future 会一直挂着，一 await 就会把
     // `pumpAndSettle()` 拖死（轮询空转到超时）。反正它自己吞异常，
     // 早一点晚一点画出来都无所谓。
-    unawaited(WidgetService.sync(timetable: _active));
+    unawaited(WidgetService.sync(timetable: _active, holidays: _holidays));
     try {
       await syncReminders();
     } catch (_) {

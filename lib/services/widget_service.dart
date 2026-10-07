@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../models/holiday_calendar.dart';
 import '../models/period.dart';
 import '../models/timetable.dart';
 
@@ -30,9 +31,11 @@ class WidgetService {
   static Future<void> sync({
     Timetable? timetable,
     List<Period>? periods,
+    HolidayCalendar? holidays,
   }) async {
     if (!supported) return;
     final list = periods ?? activePeriods;
+    final cal = holidays ?? const HolidayCalendar();
     try {
       await _channel.invokeMethod<bool>('update', <String, dynamic>{
         'hasTimetable': timetable != null,
@@ -46,6 +49,24 @@ class WidgetService {
                   })
               .toList(),
         ),
+        // 节假日日历：放假那天原生侧别把课画出来；调休补班那天按指定周几画。
+        // 用 epochDay（UTC 天数，和 `lib/models/holiday_calendar.dart` 的算法一致）
+        // 而不是日期字符串，原生侧好比对、好排序、不受时区影响。
+        'holidays': jsonEncode(<String, dynamic>{
+          'h': cal.holidays
+              .map((h) => <String, dynamic>{
+                    'e': epochDayOf(h.date),
+                    'n': h.name,
+                  })
+              .toList(),
+          'm': cal.makeups
+              .map((m) => <String, dynamic>{
+                    'e': epochDayOf(m.date),
+                    'w': m.weekday,
+                    'n': m.note,
+                  })
+              .toList(),
+        }),
       });
     } catch (_) {
       // 原生侧没注册（比如测试环境）或出错，都不该冒泡。

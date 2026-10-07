@@ -1930,4 +1930,142 @@ setup-java temurin 21、`subosito/flutter-action@v2` 固定 `flutter-version: 3.
   中文/全角括号搞乱），带 `param()` 的脚本在这种执行方式下参数不好传；改成「从 `$env:GH_PAT`
   或已有变量取默认值」。
 
+### 9.19 出厂作息换成学校统一作息（2026-05-06 起）+ 一轮代码优化
+
+#### 9.19.1 作息改了什么
+
+依据教务处《关于执行全年统一作息时间的通知》（2026-04-29 发布，自 2026-05-06 起执行）。
+每节仍是 45 分钟，上午第 2 节后与下午第 2 节后各有一段大课间休息。
+
+| | 旧（2026-05-06 前） | 新 | 变化 |
+| --- | --- | --- | --- |
+| 上午 1-4 节 | 08:00 / 08:55 / 10:00 / 10:55 | 08:20 / 09:15 / 10:20 / 11:15 | 整段后移 20 分钟 |
+| 下午 5-8 节 | 14:30 / 15:25 / 16:30 / 17:25 | 14:20 / 15:15 / 16:20 / 17:15 | 整段提前 10 分钟 |
+| 晚上 9-11 节 | 19:00 / 19:55 / 20:50 | 19:00 / 19:55 / 20:50 | 不变 |
+
+一共要动四个地方，**漏一个就会显示两套时间**：
+`lib/models/period.dart` 的 `defaultPeriods`、
+`android/.../widget/WidgetData.kt` 的 `DEFAULT_PERIODS`（Kotlin 没同步过数据时的兜底）、
+`preview.html` 的 `PERIODS`、以及下面这条最容易漏的版本号。
+`widget_today_preview.xml` 与 `tool/make_widget_preview.py` 是「添加小组件」面板上的静态示例，
+也一并同步了（`drawable-nodpi/widget_preview.png` 需重跑脚本重新生成）。
+
+#### 9.19.2 最隐蔽的坑：改默认值对老用户**不生效**
+
+`AppState.init()` 是「存档存在就用存档，没有才用默认」。所以老用户只要打开过
+「设置 → 节次时间」并点过保存（哪怕一个字没改），本地就躺着一份旧作息存档，
+升级后它会继续挡着新的 `defaultPeriods` —— **课程提醒会一直按已经作废的时间响**，
+而且界面上看起来一切正常，极难发现。
+
+解法是给存档加版本号：`PeriodStore.currentVersion`（改出厂作息时 +1）。`load()` 时若
+`version < currentVersion` 且存档与 `legacyDefaultPeriods`（旧出厂默认）**逐节相同**，
+说明用户只是原样保存过、并没真调过 → 返回 null 让它回落到新作息；
+对不上的（用户真改过）原样保留。**判断基准 `legacyDefaultPeriods` 不能删。**
+
+#### 9.19.3 周次算法有三份，其中一份没做日期归一化（真 bug）
+
+同一件事在三处各写了一遍：
+
+* `AppState._autoDetectWeek`：`now.difference(start).inDays ~/ 7 + 1` —— 用了带时分秒的 `now`
+* `HomePage._realWeek`：`today.difference(first).inDays ~/ 7 + 1` —— 已归一化到当天
+* `TimetableGrid._todayColumn`：又抄了一遍归一化版
+
+之前没炸纯属运气：所有写 `startDate` 的地方（解析器、日期选择器）都填的是当地午夜，
+`difference().inDays` 截出来刚好等于日历天数差。但只要 `startDate` 带上时间分量，
+第一处每跨一天的头几小时就会少算一天 —— **「初始周」偏一天，且网格高亮的今天和
+「回到本周」跳的周不是同一周**。
+
+修法：抽 `lib/models/semester.dart` 的 `weekOfSemester()`（内部用 `epochDayOf` 相减），
+三处全部改为调用它。这也正好补上了红线第 1 条一直在强调、偏偏这几处没遵守的
+「算天用 epochDay」。新增 `test/semester_test.dart` 把它钉死，含一条针对性回归用例。
+
+> ⚠️ 顺带一个发现：**`flutter test` 跑在 UTC 时区下**。回归用例原本写成
+> `DateTime.parse('2026-08-31T00:00:00.000Z')` 再断言 `hour == 8`（东八区下成立），
+> 实测却是 0，用例直接红。改成 `DateTime(2026, 8, 31, 8, 0)` 本地构造才稳定 ——
+> 以后写时间相关用例**不要依赖运行环境的时区**。
+
+#### 9.19.4 「课堂倒计时」和「当前时间线」其实是冻结的
+
+`lib/` 全目录原先没有任何 `Timer` / `Stream`，而这两个功能都需要随时间推进：
+`_buildCountdown()` 和 `_nowLineY()` 都只在 `build()` 里读一次 `DateTime.now()`。
+App 开着两小时，倒计时仍显示开屏那一刻的读数，红线也停在原位 —— README 却宣传了这两项。
+
+加了 `lib/widgets/minute_ticker.dart`（对齐到下一个整分、`resumed` 时校准一次）：
+
+* **刻意做成局部 builder**，只包住倒计时那一小块和时间线那一条。
+  若让首页整体计时重建，每分钟都会把整张课表网格连同布局算法重排一遍。
+* 测试环境自动关掉定时器（读 `FLUTTER_TEST` 环境变量，与 `HolidaySyncService` 同一约定），
+  否则 `Timer.periodic` 会把 `pumpAndSettle()` 拖到超时 —— 和
+  `_syncAfterChange` 故意不 await `WidgetService.sync` 是同一个坑。
+* 时间线用 `Positioned.fill` + `Transform.translate` 而不是直接改 `Positioned` 的 `top`：
+  **Stack 只认直接的 `Positioned` 子节点**，中间隔一层 `MinuteTicker` 就不当定位元素了，
+  会整块跑到左上角去。
+
+#### 9.19.5 顺手修的小问题
+
+* `AppState.init()` 把全部课表 JSON **解析了两遍**（`loadActive()` 内部又调一次 `loadAll()`），
+  而 `getActiveId()` 早就写好了却从没被调用过（全仓零引用）。改成取 id 后在已加载列表里找。
+* `home_page.dart` 四个方法签名写的是 `dynamic tt`，放着现成的 `Timetable` 不用 ——
+  字段写错只有运行时才发现、IDE 重构失效，这也是 `_realWeek` 能和 `_autoDetectWeek`
+  悄悄漂移的原因之一。`analyze` 对 `dynamic` 不报警，所以这条藏得住。
+* `removeTimetable()` 换成备选课表时漏了 `_autoDetectWeek()`（`setActive()` 里是有的），
+  新课表 `totalWeeks` 更小时 `_currentWeek` 会停在越界的周；
+  另外删空后没清激活记录，留了个指向不存在课表的 id（补了 `TimetableStore.clearActive()`）。
+
+#### 9.19.6 一个被否掉的改动：给网格布局加缓存
+
+本来打算按 `(课表, 周次, 显示开关)` 缓存 `_layout()` 结果以配合每分钟刷新。做完发现两件事，
+于是**撤掉了**：
+
+1. `Timetable` 是可变对象，`updateTimetable(tt)` 传进来的常常是同一个实例，
+   靠 `identityHashCode` + 课程条数做指纹会在「改了某门课的时间但课程数不变」时漏掉失效，
+   **课表改了网格却不刷新** —— 为省一点 CPU 引入这种 bug 不划算。
+2. 更关键的是重新推演后发现**缓存本来就不必要**：`MinuteTicker` 的 `setState` 只重建
+   它自己那棵子树，并不会带动 `TimetableGrid` rebuild；全量重排本来就只在
+   切周 / 改课表 / 切显示开关时发生，都是低频操作。
+
+教训：加缓存前先确认「重建到底是谁触发的」，局部 ticker 不会向上冒泡。
+
+#### 9.19.7 验证
+
+* `flutter analyze` → **No issues found!**
+* `flutter test` → **210 个用例全部通过**（原 196 + 新增 14：
+  `semester_test.dart` 10 条、出厂作息升级迁移 3 条、原有用例改断言 1 条）
+* 受影响的 `period_settings_test` / `widget_service_test` / `timetable_grid_test` /
+  `home_page_test` / `app_flow_test` 均单独跑过。
+* ⚠️ 提醒相关的**原生 E2E 没跑**（需要真机 / 模拟器）。作息时间直接影响
+  `ReminderScheduler` 的排布结果，发布前建议在模拟器上补跑
+  `integration_test/reminder_e2e_test.dart` 与 `holiday_reminder_e2e_test.dart`。
+
+## 9.20 v1.1.13 —— 桌面小组件节假日感知 + 收尾
+
+> 9.18 / 9.19 的优化（统一周次算法、解冻倒计时、出厂作息迁移、节假日日历）都还在
+> `1.1.12+14` 的代码基上，这一版正式把版本号抬到 `1.1.13+15`，并补齐一处遗漏：
+> **原生桌面小组件此前完全不知道节假日**，放假那天仍会把课画到桌面上。
+
+### 9.20.1 桌面小组件也要「放假不画课」
+
+首页课表与倒计时已经在 9.19 里接了 `HolidayCalendar`，但原生小组件走的是
+`WidgetBridge` → `NjtcWidgetStore` → `WidgetData.build` 这条**不依赖 Flutter** 的链路，
+之前只推了课表和节次时间，没推节假日。本次补全：
+
+* `WidgetService.sync` 新增 `holidays` 参数，把 `HolidayCalendar` 序列化成
+  `{"h":[{"e":epochDay,"n":"名称"}, …], "m":[{"e":epochDay,"w":周几,"n":"备注"}, …]}` 一并下发
+  （用 epochDay 而非日期串，与原生侧 `todayEpochDay` 用同一套 UTC 天数算法）。
+* `NjtcWidgetStore` 新增 `holidays` 字段持久化；`WidgetBridge` 透传。
+* `WidgetData.build` 解析后：放假日直接返回「今天放假 · <名称>」且**不画任何课**；
+  调休补班日按 `w` 指定的周几排课，并在页脚标注「补周X · …」。
+
+三条 `sync` 调用点（启动、课表变更、设置页手动同步）都已传入 `state.holidays`。
+未推送过节假日时（老存档 / 测试环境）行为与旧版完全一致。
+
+### 9.20.2 验证
+
+* `flutter analyze` → **No issues found!**
+* `flutter test` → 全量用例通过（`widget_service_test` 新增「节假日日历随 sync 下发」断言）。
+* 原生侧 Kotlin 改动属逻辑补全，建议发布前在真机 / 模拟器上确认：放假当天桌面组件不显示课程、
+  调休补班当天显示对应周几的课程。
+
+* 版本：`pubspec.yaml` `1.1.13+15`，`settings_page.dart` 关于页 `v1.1.13`。
+
 

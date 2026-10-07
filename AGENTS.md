@@ -1,7 +1,7 @@
 # AGENTS.md — 接手这个项目前先读这页
 
 内江师范学院课程表（Android / Flutter）。当前版本 **1.1.12+14**（`pubspec.yaml`），
-**196 个单元测试全绿**（16 个 `test/*_test.dart` + 6 个 `integration_test/*_e2e_test.dart`）。
+**210 个单元测试全绿**（17 个 `test/*_test.dart` + 6 个 `integration_test/*_e2e_test.dart`）。
 
 这一页只写「接手必须知道的约定与红线」，是 [`BUILD_NOTES.md`](BUILD_NOTES.md) 里 §9.x 各轮
 踩坑记录的浓缩版。**改代码前先扫一遍 §9.16 ~ §9.18**（显示开关、节假日联网更新、发布流程），
@@ -12,7 +12,7 @@
 ```powershell
 $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 flutter 3.47.6
 & $flutter analyze            # 必须 0 issue
-& $flutter test               # 必须 196 passed
+& $flutter test               # 必须 210 passed
 ```
 
 * 动了**提醒排程 / 桌面小组件 / 网页导入**这三块（Dart 与 Kotlin 都要改的那种），还要跑对应的
@@ -44,6 +44,15 @@ $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 
 6. **仓库是公开的，别提交敏感文件**：`android/local.properties`、keystore / `.jks`、`.env`
    都已在 `.gitignore` 里，加新密钥前先确认不会被 `git status` 带进去。
 7. **当前 APK 是 debug 签名**，只能自测/内测分发，**不能上架应用商店**。
+8. **改出厂作息要同时动四个地方**：`lib/models/period.dart` 的 `defaultPeriods`、
+   `android/.../widget/WidgetData.kt` 的 `DEFAULT_PERIODS`（Kotlin 侧兜底）、
+   `preview.html` 的 `PERIODS`，**外加把 `PeriodStore.currentVersion` +1**。
+   最后一步最容易漏：老用户只要打开过「节次时间」页并点过保存，本地就躺着一份
+   旧存档，不给版本号的话它会一直挡着新默认值，**课程提醒也就一直按已作废的时间响**。
+   `legacyDefaultPeriods` 是判断「那份存档只是原样保存、还是用户真调过」的基准，别删。
+9. **周次换算只有 `lib/models/semester.dart` 一份**（`weekOfSemester`）。
+   首页、网格、`AppState` 都调它，别再手写 `difference().inDays ~/ 7 + 1` ——
+   那玩意儿会把时分秒算进去，`startDate` 一有时间分量就和别的页面算出不同的周。
 
 ## 发布
 

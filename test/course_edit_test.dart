@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:njtc_schedule/app_state.dart';
 import 'package:njtc_schedule/models/course.dart';
+import 'package:njtc_schedule/models/holiday_calendar.dart';
 import 'package:njtc_schedule/models/timetable.dart';
 import 'package:njtc_schedule/pages/home_page.dart';
 import 'package:njtc_schedule/theme.dart';
+import 'package:njtc_schedule/widgets/timetable_grid.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,6 +28,11 @@ Future<AppState> _state({bool withTimetable = true}) async {
   SharedPreferences.setMockInitialValues({});
   final state = AppState();
   await state.init();
+  // 清掉内置节假日：这几条用例只关心增删改，不关心放假。
+  // 不清的话它们会**随真实日期漂移** —— 内置日历里 10-01~10-07 是国庆假期，
+  // 而学期起始 2026-08-31 让「今天」正好落在第 6 周（10-05 周一），
+  // 周一那列会被当成放假日，课就画不出来了。
+  await state.updateHolidays(const HolidayCalendar());
   if (withTimetable) {
     await state.addTimetable(Timetable(
       id: 't1',
@@ -37,6 +44,15 @@ Future<AppState> _state({bool withTimetable = true}) async {
   }
   return state;
 }
+
+/// 只在**课表网格里**找课程名。
+///
+/// 首页倒计时框也会显示下一节课的课名（今天的课上完后它会找明天的），
+/// 直接 `find.text(...)` 会同时命中两处，`findsOneWidget` 就假失败了。
+Finder inGrid(String text) => find.descendant(
+      of: find.byType(TimetableGrid),
+      matching: find.text(text),
+    );
 
 Future<void> _pumpHome(WidgetTester tester, AppState state) async {
   tester.view.physicalSize = const Size(1200, 2400);
@@ -83,7 +99,7 @@ void main() {
     expect(added.endWeek, 20);
     // 保存后编辑页已关闭，新课程出现在首页课表上
     expect(find.text('添加课程'), findsNothing);
-    expect(find.text('大学物理'), findsOneWidget);
+    expect(inGrid('大学物理'), findsOneWidget);
   });
 
   testWidgets('课程名称为空时提示且不保存', (tester) async {
@@ -103,7 +119,7 @@ void main() {
     final state = await _state();
     await _pumpHome(tester, state);
 
-    await tester.tap(find.text('高等数学Ⅰ（上）').first);
+    await tester.tap(inGrid('高等数学Ⅰ（上）').first);
     await tester.pumpAndSettle();
     expect(find.text('编辑'), findsOneWidget);
 
@@ -119,14 +135,14 @@ void main() {
     expect(courses.length, 1, reason: '编辑不应产生第二门课');
     expect(courses.first.name, '高等数学Ⅱ（下）');
     expect(courses.first.location, '明德楼A103', reason: '没改的字段要保留');
-    expect(find.text('高等数学Ⅱ（下）'), findsOneWidget);
+    expect(inGrid('高等数学Ⅱ（下）'), findsOneWidget);
   });
 
   testWidgets('详情弹窗「删除」二次确认后课程消失', (tester) async {
     final state = await _state();
     await _pumpHome(tester, state);
 
-    await tester.tap(find.text('高等数学Ⅰ（上）').first);
+    await tester.tap(inGrid('高等数学Ⅰ（上）').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
@@ -136,7 +152,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(state.active!.courses, isEmpty);
-    expect(find.text('高等数学Ⅰ（上）'), findsNothing);
+    expect(inGrid('高等数学Ⅰ（上）'), findsNothing);
   });
 
   testWidgets('没有任何课表时「手动添加课程」会自动建一份课表', (tester) async {

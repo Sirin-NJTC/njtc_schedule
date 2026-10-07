@@ -16,23 +16,31 @@ internal object NjtcWidgetStore {
     private const val PREFS = "njtc_widget"
     private const val KEY_TIMETABLE = "timetable"
     private const val KEY_PERIODS = "periods"
+    private const val KEY_HOLIDAYS = "holidays"
     private const val KEY_HAS_TIMETABLE = "has_timetable"
     private const val KEY_UPDATED_AT = "updated_at"
 
     fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** 保存 Flutter 侧推过来的课表与节次时间（传 null 表示清掉）。 */
+    /**
+     * 保存 Flutter 侧推过来的课表、节次时间与节假日日历（传 null 表示清掉）。
+     *
+     * [holidays] 是 Dart 侧 `HolidayCalendar` 序列化后的 JSON，形如
+     * `{"h":[{"e":epochDay,"n":"名称"}, …], "m":[{"e":epochDay,"w":周几,"n":"备注"}, …]}`。
+     */
     fun save(
         context: Context,
         hasTimetable: Boolean,
         timetable: String?,
         periods: String?,
+        holidays: String? = null,
     ) {
         val editor = prefs(context).edit()
         editor.putBoolean(KEY_HAS_TIMETABLE, hasTimetable)
         if (timetable == null) editor.remove(KEY_TIMETABLE) else editor.putString(KEY_TIMETABLE, timetable)
         if (periods == null) editor.remove(KEY_PERIODS) else editor.putString(KEY_PERIODS, periods)
+        if (holidays == null) editor.remove(KEY_HOLIDAYS) else editor.putString(KEY_HOLIDAYS, holidays)
         editor.putLong(KEY_UPDATED_AT, System.currentTimeMillis())
         editor.apply()
     }
@@ -51,6 +59,9 @@ internal object NjtcWidgetStore {
 
     /** 节次时间的 JSON 数组，形如 `[{"s":1,"a":"08:00","b":"08:45"}, …]`。 */
     fun periods(context: Context): String? = prefs(context).getString(KEY_PERIODS, null)
+
+    /** 节假日日历 JSON（`{"h":[…], "m":[…]}`），没有推送过则返回 null。 */
+    fun holidays(context: Context): String? = prefs(context).getString(KEY_HOLIDAYS, null)
 
     /** 上次同步时间（毫秒），给小组件上的「未同步」提示用。 */
     fun updatedAt(context: Context): Long = prefs(context).getLong(KEY_UPDATED_AT, 0L)

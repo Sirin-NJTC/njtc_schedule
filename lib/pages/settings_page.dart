@@ -411,7 +411,7 @@ class _WidgetEntry extends StatelessWidget {
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: () async {
-                  await WidgetService.sync(timetable: state.active);
+                  await WidgetService.sync(timetable: state.active, holidays: state.holidays);
                   if (!sheet.mounted) return;
                   Navigator.of(sheet).pop();
                   if (!context.mounted) return;
@@ -447,7 +447,7 @@ class _AboutSection extends StatelessWidget {
             SizedBox(height: 8),
             Text(
               // 版本号需与 pubspec.yaml 的 `version:` 保持一致（前者显示、后者决定 APK 文件名与 versionCode）。
-              '内江师范学院课程表 v1.1.12\n'
+              '内江师范学院课程表 v1.1.13\n'
               '支持从教务系统导入课程表（网页登录抓取 / 导出文件 / 粘贴文本），'
               '自动识别周次、节次、单双周，提供周次切换、课堂倒计时、多课表管理等实用功能，'
               '也可以手动添加、编辑、删除单门课程（导入缺了教师或教室时可直接补）；'

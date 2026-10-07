@@ -24,15 +24,18 @@ class WidgetBridge(private val context: Context, messenger: BinaryMessenger) {
                     val hasTimetable = call.argument<Boolean>("hasTimetable") ?: false
                     val timetable = call.argument<String>("timetable")
                     val periods = call.argument<String>("periods")
+                    val holidays = call.argument<String>("holidays")
                     NjtcWidgetStore.save(
                         context.applicationContext,
                         hasTimetable,
                         timetable,
                         periods,
+                        holidays,
                     )
                     TodayWidgetProvider.refreshAll(context.applicationContext)
                     Log.i(TAG, "已同步小组件数据 hasTimetable=$hasTimetable " +
-                        "timetable=${timetable?.length ?: 0}B periods=${periods?.length ?: 0}B")
+                        "timetable=${timetable?.length ?: 0}B periods=${periods?.length ?: 0}B " +
+                        "holidays=${holidays?.length ?: 0}B")
                     result.success(true)
                 }
                 "refresh" -> {

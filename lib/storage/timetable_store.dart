@@ -59,6 +59,12 @@ class TimetableStore {
     await prefs.setString(_keyActive, id);
   }
 
+  /// 清掉激活记录（删除最后一份课表时用，避免留下一个指向不存在课表的 id）。
+  static Future<void> clearActive() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyActive);
+  }
+
   /// 获取当前激活课表。
   static Future<Timetable?> loadActive() async {
     final prefs = await SharedPreferences.getInstance();

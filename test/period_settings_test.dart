@@ -55,7 +55,7 @@ void main() {
     });
 
     test('withTime 只换时间，保留节次与标签', () {
-      final p = defaultPeriods[4]; // 第5节 14:30-15:15
+      final p = defaultPeriods[4]; // 第5节 14:20-15:05
       final q = p.withTime(
         startHour: 14,
         startMinute: 0,
@@ -65,7 +65,7 @@ void main() {
       expect(q.section, 5);
       expect(q.label, '第5节');
       expect(q.encode(), '14:00-14:45');
-      expect(p.encode(), '14:30-15:15', reason: '原对象不应被改动');
+      expect(p.encode(), '14:20-15:05', reason: '原对象不应被改动');
     });
   });
 
@@ -104,7 +104,7 @@ void main() {
     });
 
     test('setActivePeriods 后 periodOfSection 读到新时间', () {
-      expect(periodOfSection(1).encode(), '08:00-08:45');
+      expect(periodOfSection(1).encode(), '08:20-09:05');
       setActivePeriods([
         const Period(
           section: 1,
@@ -195,6 +195,51 @@ void main() {
         'njtc_periods': <String>['乱码', 'not-a-time'],
       });
       expect(await PeriodStore.load(), isNull);
+    });
+
+    test('老版本存的「旧出厂默认」会被新作息顶掉', () async {
+      // 模拟老用户：打开过节次时间页并原样保存，存档里躺的是 08:00 那套旧作息，
+      // 且没有版本号（视为 v1）。升级后这份存档不该继续挡着新作息 ——
+      // 否则课程提醒会一直按已经作废的时间响。
+      SharedPreferences.setMockInitialValues({
+        'njtc_periods': legacyDefaultPeriods.map((e) => e.encode()).toList(),
+      });
+      expect(
+        await PeriodStore.load(),
+        isNull,
+        reason: '和旧出厂默认一字不差 = 用户没真调过，应让位给新作息',
+      );
+    });
+
+    test('用户自己调过的老存档不会被顶掉', () async {
+      final custom = List<Period>.from(legacyDefaultPeriods);
+      custom[0] = custom[0].withTime(
+        startHour: 7,
+        startMinute: 30,
+        endHour: 8,
+        endMinute: 15,
+      );
+      SharedPreferences.setMockInitialValues({
+        'njtc_periods': custom.map((e) => e.encode()).toList(),
+      });
+      final loaded = await PeriodStore.load();
+      expect(loaded, isNotNull, reason: '改过的时间必须保留，不能被升级冲掉');
+      expect(loaded!.first.encode(), '07:30-08:15');
+    });
+
+    test('新版本存下来的时间原样返回', () async {
+      SharedPreferences.setMockInitialValues({});
+      final custom = List<Period>.from(defaultPeriods);
+      custom[0] = custom[0].withTime(
+        startHour: 8,
+        startMinute: 0,
+        endHour: 8,
+        endMinute: 45,
+      );
+      await PeriodStore.save(custom); // save 会写下当前版本号
+      final loaded = await PeriodStore.load();
+      expect(loaded, isNotNull);
+      expect(loaded!.first.encode(), '08:00-08:45', reason: '新版本下用户自己定的时间照旧');
     });
 
     test('clear 之后 load 回到 null', () async {
@@ -299,7 +344,7 @@ void main() {
       for (var i = 1; i <= 11; i++) {
         expect(find.text('第$i节'), findsOneWidget);
       }
-      expect(find.text('08:00'), findsOneWidget);
+      expect(find.text('08:20'), findsOneWidget);
       expect(find.text('21:35'), findsOneWidget);
       expect(find.text('45 分'), findsWidgets);
     });
@@ -309,7 +354,7 @@ void main() {
       await tester.tap(find.text('节次时间'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('08:00'));
+      await tester.tap(find.text('08:20'));
       await tester.pumpAndSettle();
       expect(find.byType(TimePickerDialog), findsOneWidget);
       expect(find.text('第1节 开始时间'), findsOneWidget);
@@ -317,7 +362,7 @@ void main() {
 
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
-      expect(find.text('08:00'), findsOneWidget, reason: '取消后时间不变');
+      expect(find.text('08:20'), findsOneWidget, reason: '取消后时间不变');
     });
 
     testWidgets('保存默认作息的节次表不会报错', (tester) async {
@@ -354,7 +399,7 @@ void main() {
       await tester.tap(find.text('恢复默认'));
       await tester.pumpAndSettle();
       expect(find.text('09:30'), findsNothing);
-      expect(find.text('08:00'), findsOneWidget);
+      expect(find.text('08:20'), findsOneWidget);
     });
   });
 }

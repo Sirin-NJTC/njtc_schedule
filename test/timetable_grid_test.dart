@@ -12,6 +12,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:njtc_schedule/models/course.dart';
+import 'package:njtc_schedule/models/holiday_calendar.dart';
 import 'package:njtc_schedule/models/timetable.dart';
 import 'package:njtc_schedule/theme.dart';
 import 'package:njtc_schedule/widgets/course_card.dart';
@@ -56,6 +57,7 @@ Future<void> pumpGrid(
   int week, {
   bool showWeekend = true,
   bool showInactiveCourses = false,
+  HolidayCalendar holidays = const HolidayCalendar(),
 }) async {
   // 手机宽度：7 天网格放不下，正好验证横向滚动 + 自动滚动到今天不崩
   tester.view.physicalSize = const Size(1200, 2000);
@@ -70,6 +72,7 @@ Future<void> pumpGrid(
         currentWeek: week,
         showWeekend: showWeekend,
         showInactiveCourses: showInactiveCourses,
+        holidays: holidays,
       ),
     ),
   ));
@@ -356,6 +359,95 @@ void main() {
           .map((o) => o.opacity)
           .toList();
       expect(opacities, contains(closeTo(0.35, 0.001)));
+    });
+  });
+
+  // 第 1 周 = 2026-08-31(周一) ~ 09-06(周日)：09-02 是周三、09-05 是周六
+  final week1Start = DateTime(2026, 8, 31);
+
+  group('节假日 / 调休补班', () {
+    List<double> opacitiesOf(WidgetTester tester, String name) => tester
+        .widgetList<Opacity>(find.ancestor(
+          of: find.text(name),
+          matching: find.byType(Opacity),
+        ))
+        .map((o) => o.opacity)
+        .toList();
+
+    testWidgets('放假日那天的课按「不上」处理，表头写「放假」', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '周三的课', day: 3, start: 3, end: 4),
+        ], startDate: week1Start),
+        1,
+        showInactiveCourses: true,
+        holidays: HolidayCalendar(
+          holidays: [HolidayDay(DateTime(2026, 9, 2), '测试放假日')],
+        ),
+      );
+
+      expect(find.text('周三的课'), findsOneWidget);
+      expect(find.text('放假'), findsOneWidget, reason: '表头要说明这列为什么淡');
+      expect(
+        opacitiesOf(tester, '周三的课'),
+        contains(closeTo(0.35, 0.001)),
+        reason: '放假日不上课，和「非本周课程」一样画淡',
+      );
+    });
+
+    testWidgets('不开「显示非本周课程」时放假日那列是空的', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '周三的课', day: 3, start: 3, end: 4),
+        ], startDate: week1Start),
+        1,
+        holidays: HolidayCalendar(
+          holidays: [HolidayDay(DateTime(2026, 9, 2), '测试放假日')],
+        ),
+      );
+
+      expect(find.text('周三的课'), findsNothing);
+      expect(find.text('放假'), findsOneWidget, reason: '表头仍要说明，否则用户以为课丢了');
+    });
+
+    testWidgets('补班日（周六补周三）显示被补星期的课', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '周三的课', day: 3, start: 3, end: 4),
+        ], startDate: week1Start),
+        1,
+        holidays: HolidayCalendar(
+          makeups: [MakeupDay(DateTime(2026, 9, 5), 3, '补周三的课')],
+        ),
+      );
+
+      // 周三那列一份，补班的周六那列也一份
+      expect(find.text('周三的课'), findsNWidgets(2));
+      expect(find.text('补周三'), findsOneWidget);
+      expect(
+        opacitiesOf(tester, '周三的课'),
+        everyElement(1.0),
+        reason: '补班日那节课是真要上的，不能画淡',
+      );
+    });
+
+    testWidgets('没设学期起始日期时不套用节假日（退回旧行为）', (tester) async {
+      await pumpGrid(
+        tester,
+        tt([
+          c(name: '周三的课', day: 3, start: 3, end: 4),
+        ]), // startDate 为 null
+        1,
+        holidays: HolidayCalendar(
+          holidays: [HolidayDay(DateTime(2026, 9, 2), '测试放假日')],
+        ),
+      );
+
+      expect(find.text('周三的课'), findsOneWidget);
+      expect(find.text('放假'), findsNothing);
     });
   });
 }

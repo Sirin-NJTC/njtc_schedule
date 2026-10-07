@@ -29,7 +29,7 @@ class Period {
   String get endText =>
       '${endHour.toString().padLeft(2, '0')}:${endMinute.toString().padLeft(2, '0')}';
 
-  /// 持久化用的紧凑写法，如 `08:00-08:45`（节次由下标决定，不存）。
+  /// 持久化用的紧凑写法，如 `08:20-09:05`（节次由下标决定，不存）。
   String encode() => '$startText-$endText';
 
   /// 从 [encode] 的写法还原；格式不对或时间越界时返回 null。
@@ -69,7 +69,46 @@ class Period {
 }
 
 /// 内江师范学院常规作息（出厂默认值，用户可在「设置 → 节次时间」里改）。
+///
+/// 依据《内江师范学院关于执行全年统一作息时间的通知》（教务处 2026-04-29 发布），
+/// **自 2026 年 5 月 6 日（星期三）起执行**，全年统一：
+///
+/// | 节次 | 上课时间 | 节次 | 上课时间 |
+/// | --- | --- | --- | --- |
+/// | 上午 1-4 节 | 08:20 / 09:15 / 10:20 / 11:15 | 下午 5-8 节 | 14:20 / 15:15 / 16:20 / 17:15 |
+/// | 晚上 9-11 节 | 19:00 / 19:55 / 20:50 | | |
+///
+/// 相比 2026-05-06 之前的旧作息只有三处变化：上午整段后移 20 分钟、
+/// 下午整段提前 10 分钟、晚上三节不变。每节仍是 45 分钟，
+/// 上午第 2 节后与下午第 2 节后各有一段「大课间休息」。
+///
+/// ⚠️ 改这里时记得同步另外两处同源数据，否则界面会显示两套时间：
+/// * `android/.../widget/WidgetData.kt` 的 `DEFAULT_PERIODS`（Kotlin 侧兜底）
+/// * `preview.html` 的 `PERIODS`（免安装网页预览）
 const List<Period> defaultPeriods = [
+  Period(section: 1, label: '第1节', startHour: 8, startMinute: 20, endHour: 9, endMinute: 5),
+  Period(section: 2, label: '第2节', startHour: 9, startMinute: 15, endHour: 10, endMinute: 0),
+  Period(section: 3, label: '第3节', startHour: 10, startMinute: 20, endHour: 11, endMinute: 5),
+  Period(section: 4, label: '第4节', startHour: 11, startMinute: 15, endHour: 12, endMinute: 0),
+  Period(section: 5, label: '第5节', startHour: 14, startMinute: 20, endHour: 15, endMinute: 5),
+  Period(section: 6, label: '第6节', startHour: 15, startMinute: 15, endHour: 16, endMinute: 0),
+  Period(section: 7, label: '第7节', startHour: 16, startMinute: 20, endHour: 17, endMinute: 5),
+  Period(section: 8, label: '第8节', startHour: 17, startMinute: 15, endHour: 18, endMinute: 0),
+  Period(section: 9, label: '第9节', startHour: 19, startMinute: 0, endHour: 19, endMinute: 45),
+  Period(section: 10, label: '第10节', startHour: 19, startMinute: 55, endHour: 20, endMinute: 40),
+  Period(section: 11, label: '第11节', startHour: 20, startMinute: 50, endHour: 21, endMinute: 35),
+];
+
+/// 2026-05-06 **之前**的出厂作息（上午 08:00 起、下午 14:30 起）。
+///
+/// **只为数据迁移保留，业务代码一律用 [defaultPeriods]。**
+///
+/// 老版本 App 里只要用户打开过「设置 → 节次时间」并点过保存，本地就会躺一份
+/// 存档；升级到新作息后，这份旧存档会继续挡着新的默认值，课程提醒也就
+/// 一直按已经作废的时间响。`PeriodStore.load()` 靠这份常量判断
+/// 「那份存档是不是只是原样保存的默认值」—— 只有这种情况才顶掉它，
+/// 用户自己调过的时间一律保留。
+const List<Period> legacyDefaultPeriods = [
   Period(section: 1, label: '第1节', startHour: 8, startMinute: 0, endHour: 8, endMinute: 45),
   Period(section: 2, label: '第2节', startHour: 8, startMinute: 55, endHour: 9, endMinute: 40),
   Period(section: 3, label: '第3节', startHour: 10, startMinute: 0, endHour: 10, endMinute: 45),

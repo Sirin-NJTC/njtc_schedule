@@ -5,7 +5,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.HashMap
+import java.util.HashSet
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * 把 Dart 侧推过来的课表 JSON 折算成「今天要画的那几行」。
@@ -46,16 +49,22 @@ internal object WidgetData {
         0xFFEF4444.toInt(), // 红
     )
 
-    /** 出场作息，和 Dart 侧 `defaultPeriods` 保持一致（没同步过时用它兜底）。 */
+    /**
+     * 出场作息，和 Dart 侧 `defaultPeriods` 保持一致（没同步过时用它兜底）。
+     *
+     * 依据《内江师范学院关于执行全年统一作息时间的通知》（2026-04-29 发布，
+     * 自 2026-05-06 起执行）：上午 1-4 节 08:20 起、下午 5-8 节 14:20 起，
+     * 晚上 9-11 节不变。改这里时请同步 `lib/models/period.dart` 与 `preview.html`。
+     */
     private val DEFAULT_PERIODS: Map<Int, Pair<String, String>> = mapOf(
-        1 to ("08:00" to "08:45"),
-        2 to ("08:55" to "09:40"),
-        3 to ("10:00" to "10:45"),
-        4 to ("10:55" to "11:40"),
-        5 to ("14:30" to "15:15"),
-        6 to ("15:25" to "16:10"),
-        7 to ("16:30" to "17:15"),
-        8 to ("17:25" to "18:10"),
+        1 to ("08:20" to "09:05"),
+        2 to ("09:15" to "10:00"),
+        3 to ("10:20" to "11:05"),
+        4 to ("11:15" to "12:00"),
+        5 to ("14:20" to "15:05"),
+        6 to ("15:15" to "16:00"),
+        7 to ("16:20" to "17:05"),
+        8 to ("17:15" to "18:00"),
         9 to ("19:00" to "19:45"),
         10 to ("19:55" to "20:40"),
         11 to ("20:50" to "21:35"),
@@ -89,7 +98,18 @@ internal object WidgetData {
         val weekText = if (week < 0) "未设置起始日期" else "第${week}周"
 
         val periods = loadPeriods(context)
-        val dow = dayOfWeek(now)
+        val holidayIdx = parseHolidays(NjtcWidgetStore.holidays(context))
+        val today = todayEpochDay(now)
+
+        // 调休补班：这天按「周几」上课（覆盖真实星期几）；否则用真实星期几。
+        val makeupDow = holidayIdx.makeups[today]
+        val dow = makeupDow ?: dayOfWeek(now)
+
+        // 放假日（且不是补班日）→ 直接放假，不画课。
+        val holidayName = if (makeupDow == null) holidayIdx.names[today] else null
+        if (holidayName != null) {
+            return Snapshot(dateText, weekText, emptyList(), "今天放假 · $holidayName")
+        }
 
         val todays = ArrayList<JSONObject>()
         val courses = tt.optJSONArray("courses") ?: JSONArray()
@@ -113,13 +133,79 @@ internal object WidgetData {
             )
         }
 
+        // 补班日：在说明里点明「补周几」，免得看到一堆课却以为是周末。
+        val makeupNote = if (makeupDow != null) "补${WEEKDAY_NAMES[makeupDow - 1]} · " else ""
         val footer = when {
             todays.isEmpty() && week < 0 -> "今天没课（还没设置学期起始日期）"
+            todays.isEmpty() && makeupDow != null -> "今天没课（补班日）"
             todays.isEmpty() -> "今天没课，好好休息"
-            todays.size > MAX_ROWS -> "还有 ${todays.size - MAX_ROWS} 门 · 点开看全部"
-            else -> "共 ${todays.size} 门 · 点开看全部"
+            todays.size > MAX_ROWS -> "${makeupNote}还有 ${todays.size - MAX_ROWS} 门 · 点开看全部"
+            else -> "${makeupNote}共 ${todays.size} 门 · 点开看全部"
         }
         return Snapshot(dateText, weekText, rows, footer)
+    }
+
+    // ------------------------------------------------------------ 节假日
+
+    /**
+     * 解析好的节假日索引：放假日不画课、补班日按指定周几画。
+     *
+     * 数据结构对齐 Dart 侧 `HolidayCalendar` 下发的 JSON：
+     * `{"h":[{"e":epochDay,"n":"名称"}, …], "m":[{"e":epochDay,"w":周几,"n":"备注"}, …]}`。
+     */
+    private data class HolidayIndex(
+        val days: Set<Long>,
+        val names: Map<Long, String>,
+        val makeups: Map<Long, Int>,
+    ) {
+        companion object {
+            val EMPTY = HolidayIndex(emptySet(), emptyMap(), emptyMap())
+        }
+    }
+
+    private fun parseHolidays(raw: String?): HolidayIndex {
+        if (raw.isNullOrBlank()) return HolidayIndex.EMPTY
+        return try {
+            val root = JSONObject(raw)
+            val days = HashSet<Long>()
+            val names = HashMap<Long, String>()
+            val hArr = root.optJSONArray("h") ?: JSONArray()
+            for (i in 0 until hArr.length()) {
+                val o = hArr.optJSONObject(i) ?: continue
+                val e = o.optLong("e", -1L)
+                if (e < 0) continue
+                days.add(e)
+                val n = o.optString("n")
+                if (n.isNotBlank()) names[e] = n
+            }
+            val makeups = HashMap<Long, Int>()
+            val mArr = root.optJSONArray("m") ?: JSONArray()
+            for (i in 0 until mArr.length()) {
+                val o = mArr.optJSONObject(i) ?: continue
+                val e = o.optLong("e", -1L)
+                val w = o.optInt("w", 0)
+                if (e < 0 || w < 1 || w > 7) continue
+                makeups[e] = w
+            }
+            HolidayIndex(days, names, makeups)
+        } catch (e: Exception) {
+            HolidayIndex.EMPTY
+        }
+    }
+
+    /**
+     * 今天的 epochDay（UTC 天数），和 Dart 的 `epochDayOf` 完全一致：
+     * 取本地年月日当 UTC 零点，再除以 86400000。
+     */
+    private fun todayEpochDay(now: Calendar): Long {
+        val y = now.get(Calendar.YEAR)
+        val m = now.get(Calendar.MONTH) + 1
+        val d = now.get(Calendar.DAY_OF_MONTH)
+        val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+        utc.clear()
+        utc.set(y, m - 1, d, 0, 0, 0)
+        utc.set(Calendar.MILLISECOND, 0)
+        return utc.timeInMillis / 86_400_000L
     }
 
     // ------------------------------------------------------------ 细节

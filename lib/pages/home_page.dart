@@ -4,10 +4,11 @@ library;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_state.dart';
-import '../models/course.dart';
-import '../models/period.dart';
+import '../models/semester.dart';
+import '../models/timetable.dart';
 import '../theme.dart';
 import '../widgets/course_detail.dart';
+import '../widgets/minute_ticker.dart';
 import '../widgets/timetable_grid.dart';
 import 'course_edit_page.dart';
 
@@ -34,6 +35,7 @@ class HomePage extends StatelessWidget {
                       showWeekend: state.displayPrefs.showWeekend,
                       showInactiveCourses:
                           state.displayPrefs.showInactiveCourses,
+                      holidays: state.holidays,
                       onCourseTap: (c) => showCourseDetail(context, c),
                     ),
                   ),
@@ -44,7 +46,9 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, AppState state, dynamic tt) {
+  Widget _buildHeader(BuildContext context, AppState state, Timetable tt) {
+    // 算一次复用，别在同一帧里连算三遍
+    final realWeek = _realWeek(tt);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Column(
@@ -75,7 +79,9 @@ class HomePage extends StatelessWidget {
                   ],
                 ),
               ),
-              _buildCountdown(context, state, tt),
+              // 倒计时不能只在 build 时算一次 —— 用 MinuteTicker 让它每分钟自己走。
+              // 故意把 ticker 收在这一小块上，别让它带着整张网格一起重建。
+              MinuteTicker(builder: (_, now) => _buildCountdown(state, tt, now)),
               const SizedBox(width: 4),
               _buildAddButton(context),
               const SizedBox(width: 4),
@@ -123,13 +129,13 @@ class HomePage extends StatelessWidget {
             ],
           ),
           // 看的不是本周时，给一个一键回到本周的入口
-          if (_realWeek(tt) != null && _realWeek(tt) != state.currentWeek)
+          if (realWeek != null && realWeek != state.currentWeek)
             Align(
               alignment: Alignment.center,
               child: TextButton.icon(
-                onPressed: () => state.setCurrentWeek(_realWeek(tt)!),
+                onPressed: () => state.setCurrentWeek(realWeek),
                 icon: const Icon(Icons.today_rounded, size: 16),
-                label: Text('回到本周 · 第 ${_realWeek(tt)} 周',
+                label: Text('回到本周 · 第 $realWeek 周',
                     style: const TextStyle(fontSize: 12.5)),
                 style: TextButton.styleFrom(
                   foregroundColor: AppTheme.primary,
@@ -224,28 +230,18 @@ class HomePage extends StatelessWidget {
 
   /// 「今天」真正处在第几周（没有学期起始日期时返回 null）。
   ///
-  /// 与 `AppState._autoDetectWeek` 同一套算法，但这里只用于显示
-  /// 「回到本周」与周次选择器里的「本周」标记，不改变全局状态。
-  int? _realWeek(dynamic tt) {
-    final start = tt.startDate as DateTime?;
-    if (start == null) return null;
-    final total = tt.totalWeeks as int;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final first = DateTime(start.year, start.month, start.day);
-    final week = today.difference(first).inDays ~/ 7 + 1;
-    if (week < 1) return 1;
-    if (week > total) return total;
-    return week;
-  }
+  /// 算法统一走 [weekOfSemester]。这里原先另抄了一份（还抄得和 `AppState`
+  /// 那份不一样），结果「回到本周」跳的周和网格高亮的今天可能不是同一周。
+  /// 只用于显示，不改变全局状态。
+  int? _realWeek(Timetable tt) => currentWeekOf(tt.startDate, tt.totalWeeks);
 
   static String _monthDay(DateTime d) => '${d.month}/${d.day}';
 
   /// 周次选择器：列出全部周次，标出本周与当前查看的周。
-  void _showWeekPicker(BuildContext context, AppState state, dynamic tt) {
-    final total = tt.totalWeeks as int;
+  void _showWeekPicker(BuildContext context, AppState state, Timetable tt) {
+    final total = tt.totalWeeks;
     final real = _realWeek(tt);
-    final start = tt.startDate as DateTime?;
+    final start = tt.startDate;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
@@ -329,8 +325,9 @@ class HomePage extends StatelessWidget {
                           ),
                           if (start != null)
                             Text(
-                              _monthDay(
-                                  start.add(Duration(days: (week - 1) * 7))),
+                              // 走 epochDay 反推，不用 add(Duration) —— 夏令时地区
+                              // 会把 23/25 小时的一天算进去
+                              _monthDay(startOfWeek(startDate: start, week: week)!),
                               style: TextStyle(
                                 fontSize: 10,
                                 color: selected
@@ -362,31 +359,50 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _buildCountdown(BuildContext context, AppState state, dynamic tt) {
-    // 距离下一节课的倒计时
-    final now = DateTime.now();
-    Course? nextCourse;
-    Duration? nearest;
+  /// 距离下一节课的倒计时。
+  ///
+  /// [now] 由 [MinuteTicker] 每分钟递进来 —— 这里刻意不自己读 `DateTime.now()`，
+  /// 否则算一次就冻住了。
+  ///
+  /// 查找交给 [nextClassOccurrence]：它会跨天找（今天的课上完了就找明天的）、
+  /// 跳过放假日、并认得补班日。早先这里只扫今天，且拿「正在查看的周」过滤，
+  /// 用户翻到别的周时今天真实的课反而被藏掉。
+  Widget _buildCountdown(AppState state, Timetable tt, DateTime now) {
+    final next = nextClassOccurrence(
+      courses: tt.courses,
+      holidays: state.holidays,
+      startDate: tt.startDate,
+      totalWeeks: tt.totalWeeks,
+      periods: state.periods,
+      from: now,
+    );
+    if (next == null) return const SizedBox.shrink();
 
-    for (final course in tt.courses) {
-      if (!course.isActiveOnWeek(state.currentWeek)) continue;
-      if (course.dayOfWeek != now.weekday) continue;
-      final period = periodOfSection(course.startSection);
-      final startTime = period.startToday(now);
-      final diff = startTime.difference(now);
-      if (diff.isNegative) continue;
-      if (nearest == null || diff < nearest) {
-        nearest = diff;
-        nextCourse = course;
-      }
+    final Widget mainText;
+    if (next.isToday) {
+      final diff = next.startsAt.difference(now);
+      final hours = diff.inHours;
+      final minutes = diff.inMinutes % 60;
+      mainText = Text(
+        hours > 0 ? '$hours小时$minutes分' : '$minutes分钟',
+        style: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: AppTheme.primary,
+        ),
+      );
+    } else {
+      // 今天的课上完了：告诉用户下一节课在什么时候，而不是什么都不显示
+      mainText = Text(
+        '${_dayLabel(now, next.startsAt)} ${_hm(next.startsAt)}',
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.bold,
+          color: AppTheme.primary,
+        ),
+      );
     }
 
-    if (nextCourse == null || nearest == null) {
-      return const SizedBox.shrink();
-    }
-
-    final hours = nearest.inHours;
-    final minutes = nearest.inMinutes % 60;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -396,20 +412,13 @@ class HomePage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '即将上课',
-            style: TextStyle(fontSize: 11, color: AppTheme.primary),
-          ),
           Text(
-            hours > 0 ? '$hours小时$minutes分' : '$minutes分钟',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.primary,
-            ),
+            next.isToday ? '即将上课' : '下一节课',
+            style: const TextStyle(fontSize: 11, color: AppTheme.primary),
           ),
+          mainText,
           Text(
-            nextCourse.name,
+            next.course.name,
             style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -417,6 +426,19 @@ class HomePage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static String _hm(DateTime d) =>
+      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+  /// 未来某天怎么称呼：明天 / 后天 / 周几。
+  static String _dayLabel(DateTime now, DateTime target) {
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(target.year, target.month, target.day);
+    final gap = day.difference(today).inDays;
+    if (gap == 1) return '明天';
+    if (gap == 2) return '后天';
+    return '周${['一', '二', '三', '四', '五', '六', '日'][target.weekday - 1]}';
   }
 
   Widget _buildBottomBar(BuildContext context, AppState state) {

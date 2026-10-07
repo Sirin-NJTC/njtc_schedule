@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:njtc_schedule/models/course.dart';
+import 'package:njtc_schedule/models/holiday_calendar.dart';
 import 'package:njtc_schedule/models/period.dart';
 import 'package:njtc_schedule/models/timetable.dart';
 import 'package:njtc_schedule/services/widget_service.dart';
@@ -91,7 +92,7 @@ void main() {
       // 节次时间是给原生用的精简格式：s=节次、a=开始、b=结束
       final periods = jsonDecode(args['periods'] as String) as List;
       expect(periods, hasLength(defaultPeriods.length));
-      expect(periods.first, {'s': 1, 'a': '08:00', 'b': '08:45'});
+      expect(periods.first, {'s': 1, 'a': '08:20', 'b': '09:05'});
       expect(periods.last, {
         's': defaultPeriods.length,
         'a': defaultPeriods.last.startText,
@@ -134,6 +135,29 @@ void main() {
       expect(args['hasTimetable'], isFalse);
       expect(args['timetable'], isNull);
       expect(args['periods'], isA<String>());
+    });
+
+    test('sync 把节假日日历也一起推过去（放假 + 调休补班）', () async {
+      final cal = HolidayCalendar(
+        holidays: [HolidayDay(DateTime(2026, 10, 1), '国庆节')],
+        makeups: [MakeupDay(DateTime(2026, 10, 10), 3, '补周三的课')],
+      );
+      await WidgetService.sync(timetable: sample(), holidays: cal);
+
+      final args = Map<String, dynamic>.from(calls.single.arguments as Map);
+      final h = jsonDecode(args['holidays'] as String) as Map<String, dynamic>;
+      expect(
+        h['h'],
+        [
+          {'e': epochDayOf(DateTime(2026, 10, 1)), 'n': '国庆节'},
+        ],
+      );
+      expect(
+        h['m'],
+        [
+          {'e': epochDayOf(DateTime(2026, 10, 10)), 'w': 3, 'n': '补周三的课'},
+        ],
+      );
     });
 
     test('原生侧抛错只吞掉，不冒泡给调用方', () async {
