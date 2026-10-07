@@ -1,23 +1,27 @@
 # AGENTS.md — 接手这个项目前先读这页
 
-内江师范学院课程表（Android / Flutter）。当前版本 **1.1.14+16**（`pubspec.yaml`），
-**229 个单元测试全绿**（17 个 `test/*_test.dart` + 6 个 `integration_test/*_e2e_test.dart`）。
+内江师范学院课程表（Android / Flutter）。当前版本 **1.2.0+17**（`pubspec.yaml`），
+**272 个单元测试全绿**（22 个 `test/*_test.dart` + 7 个 `integration_test/*_e2e_test.dart`）。
 
 这一页只写「接手必须知道的约定与红线」，是 [`BUILD_NOTES.md`](BUILD_NOTES.md) 里 §9.x 各轮
-踩坑记录的浓缩版。**改代码前先扫一遍 §9.16 ~ §9.21**（显示开关、节假日联网更新、发布流程、
-改日历漏推小组件那个回归），那里有每条约定是怎么被踩出来的。
+踩坑记录的浓缩版。**改代码前先扫一遍 §9.16 ~ §9.22**（显示开关、节假日联网更新、发布流程、
+改日历漏推小组件那个回归、全览页 + 多格式导入 + 离线 OCR），那里有每条约定是怎么被踩出来的。
 
 ## 改完必须跑的验证
 
 ```powershell
 $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 flutter 3.47.6
 & $flutter analyze            # 必须 0 issue
-& $flutter test               # 必须 229 passed
+& $flutter test               # 必须 272 passed
 ```
 
-* 动了**提醒排程 / 桌面小组件 / 网页导入**这三块（Dart 与 Kotlin 都要改的那种），还要跑对应的
+* 动了**提醒排程 / 桌面小组件 / 网页导入 / OCR** 这几块（Dart 与 Kotlin 都要改的那种），还要跑对应的
   原生 E2E：`& $flutter test integration_test/reminder_e2e_test.dart -d <设备>` 等。
   **这些用例会把 App 卸载重装，别拿装了真实课表的真机跑，用模拟器。**
+* **OCR 的 E2E 要先有语言模型**：`tool/fetch_tessdata.ps1` 拉 `chi_sim` + `eng` 到
+  `android/app/src/main/assets/tessdata/`（不进仓库），没有的话
+  `integration_test/ocr_e2e_test.dart` 第一条就红。图片那条自带输入（现场画 PNG），
+  PDF 那条的夹具是打进包的 asset（原因见 §9.22.5）。
 * **改了出厂作息（红线 8）同样要跑原生 E2E**：`flutter test` 不覆盖 `integration_test/`。
   v1.1.13 就是把第 1 节从 08:00 改到 08:20 却没跑 E2E，`reminder_e2e_test.dart` 里写死的
   `07:30` 那一串断言红了整版都没人发现，一直到 v1.1.14 才修（§9.21.4）。
@@ -64,6 +68,17 @@ $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 
     改动后顺手看一眼：新增的 setter 里有没有忘了推。
 11. **`nextClassOccurrence` 的扫描窗口是 21 天**（`scanDays`，含今天）：法定假期可以连放 9 天以上，
     窗口短了首页整个假期都会空白。找不到下一节课时若今天正在放假，要显示「今天放假」而不是留白。
+12. **OCR 的语言模型不进仓库，但必须 `noCompress`**：`.gitignore` 忽略
+    `android/app/src/main/assets/tessdata/`（单个 13MB），CI 在 `flutter analyze` 之前下载。
+    `android/app/build.gradle.kts` 里的 `androidResources { noCompress += "traineddata" }`
+    **不能删**：AGP 默认压 assets，`assets.openFd()` 读压缩条目会抛异常，
+    表现出来却是 Dart 侧的 `MissingPluginException`（§9.22.4）。
+13. **OCR 的 MethodChannel handler 必须整体 try/catch 回 `result.error(...)`**：
+    原生异常直接从 handler 里抛出去，Dart 侧看到的是「桥没注册」这种假象，极难查。
+    改 `android/.../ocr/OcrBridge.kt` 时保持这个结构。
+14. **OCR 语言模型/引擎相关的东西一律在 `OcrService` + `OcrBridge` 里**，别把
+    `PdfRenderer`、`TextPainter` 这类平台细节漏到页面层；识别结果先给用户过一眼再解析导入
+    （OCR 出来的括号数字是会认花的，§9.22.5 有原文）。
 
 ## 发布
 
@@ -79,15 +94,16 @@ $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 
 | 文件 | 内容 |
 | --- | --- |
 | `README.md` | 功能、截图、使用指南、项目结构、已验证内容 |
-| `BUILD_NOTES.md` | **§9.1 ~ §9.21 每轮开发的踩坑与决策**，最值钱的一份 |
+| `BUILD_NOTES.md` | **§9.1 ~ §9.22 每轮开发的踩坑与决策**，最值钱的一份 |
 | `VIVO_ATOMIC_NOTIFICATION.md` | vivo 原子通知（COURSE 场景）接入细节 |
 | `AGENTS.md` | 就是本页：接手约定与红线 |
 
-仓库目录之外的东西（打包发给别人时不会带上）：`D:\DSH\dist\`（APK）、`D:\DSH\build_v114.ps1`
+仓库目录之外的东西（打包发给别人时不会带上）：`D:\DSH\dist\`（APK）、`D:\DSH\build_v120.ps1`
 （本轮用的 analyze + test + 四包构建 + aapt2 校验脚本；`build_*.ps1` 是过往各轮的同款脚本，
 **执行策略禁止直接运行未签名脚本**，用 `Invoke-Expression (Get-Content -Raw -Encoding UTF8 '<路径>')`）、
 `D:\DSH\github_release.ps1`（发 Release）、`D:\DSH\vivo_cloud_test_checklist.md`（vivo 商店上线自测清单）、
-`D:\DSH\release_notes_*.md`。
+`D:\DSH\release_notes_*.md`。仓库里跟 OCR 有关的两个工具：`tool/fetch_tessdata.ps1`
+（下载语言模型到 `assets/tessdata/`）、`tool/make_ocr_fixture.py`（生成 E2E 夹具 PNG/PDF）。
 
 ## 待办
 

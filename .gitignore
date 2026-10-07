@@ -18,6 +18,9 @@ windows/build/
 linux/flutter/ephemeral/
 macos/flutter/ephemeral/
 
+# OCR 语言模型：单个 13MB，不入库，构建前用 tool/fetch_tessdata.ps1 下载
+android/app/src/main/assets/tessdata/
+
 # 其它
 *.log
 # 注意：刻意不忽略 pubspec.lock —— 应用（而非库）应提交 lock 文件以保证依赖可复现

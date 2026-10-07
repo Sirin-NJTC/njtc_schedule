@@ -11,6 +11,7 @@ import 'pages/import_page.dart';
 import 'pages/period_settings_page.dart';
 import 'pages/reminder_settings_page.dart';
 import 'pages/timetables_page.dart';
+import 'pages/week_overview_page.dart';
 import 'pages/settings_page.dart';
 import 'theme.dart';
 
@@ -40,6 +41,7 @@ class NjtcScheduleApp extends StatelessWidget {
           '/reminders': (_) => const ReminderSettingsPage(),
           '/periods': (_) => const PeriodSettingsPage(),
           '/holidays': (_) => const HolidaySettingsPage(),
+          '/overview': (_) => const WeekOverviewPage(),
         },
       ),
     );

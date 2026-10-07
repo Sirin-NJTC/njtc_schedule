@@ -41,6 +41,21 @@ class TimetableGrid extends StatefulWidget {
   /// 默认空日历 = 旧行为，方便不关心节假别的调用方与既有测试。
   final HolidayCalendar holidays;
 
+  /// 每一列的宽度（逻辑像素）。课表全览页传更大的值把整周放大。
+  final double dayWidth;
+
+  /// 每节课的高度（逻辑像素）。
+  final double sectionHeight;
+
+  /// 是否交给 [InteractiveViewer] 做「整页缩放拖拽」（全览页用）。
+  ///
+  /// 打开后不再套内部滚动视图：整张画布一次画完，双指缩放/拖动看细节。
+  final bool zoomable;
+
+  /// 首页那张网格的默认列宽 / 行高（全览页传更大的值放大）。
+  static const double defaultDayWidth = 118;
+  static const double defaultSectionHeight = 74;
+
   const TimetableGrid({
     super.key,
     required this.timetable,
@@ -49,6 +64,9 @@ class TimetableGrid extends StatefulWidget {
     this.showWeekend = true,
     this.showInactiveCourses = false,
     this.holidays = const HolidayCalendar(),
+    this.dayWidth = defaultDayWidth,
+    this.sectionHeight = defaultSectionHeight,
+    this.zoomable = false,
   });
 
   @override
@@ -58,9 +76,14 @@ class TimetableGrid extends StatefulWidget {
 class _TimetableGridState extends State<TimetableGrid> {
   /// 一周七列；实际画几列看 [TimetableGrid.showWeekend]。
   static const int days = 7;
-  static const double dayWidth = 118;
   static const double axisWidth = 54;
-  static const double sectionHeight = 74;
+
+  /// 每列宽度 / 每节课高度：默认值给首页用，全览页传更大的值把整周放大。
+  ///
+  /// 故意写成读 widget 的 getter 而不是常量 —— 布局计算里那些
+  /// `(c.startSection - 1) * sectionHeight` 之类的算式一个都不用改。
+  double get dayWidth => widget.dayWidth;
+  double get sectionHeight => widget.sectionHeight;
 
   /// 实际要画的列数：关掉周末就只画周一到周五。
   int get _visibleDays => widget.showWeekend ? days : 5;
@@ -71,9 +94,13 @@ class _TimetableGridState extends State<TimetableGrid> {
   final ScrollController _hCtrl = ScrollController();
   bool _autoScrolled = false;
 
+  /// 全览模式的缩放/平移控制器（[TimetableGrid.zoomable] 打开时才用）。
+  final TransformationController _zoomCtrl = TransformationController();
+
   @override
   void dispose() {
     _hCtrl.dispose();
+    _zoomCtrl.dispose();
     super.dispose();
   }
 
@@ -149,34 +176,47 @@ class _TimetableGridState extends State<TimetableGrid> {
 
     _scheduleAutoScroll(today);
 
+    final canvas = Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 12, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeaderRow(today),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionAxis(sections),
+              for (var d = 0; d < _visibleDays; d++)
+                _buildDayColumn(
+                  d,
+                  sections,
+                  placed[d],
+                  isToday: today == d,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    // 全览模式：整张画布一次画完，缩放/拖动交给 InteractiveViewer。
+    // 这里绝不能再套内部滚动视图 —— 横向 SingleChildScrollView 会先把拖动事件吃掉。
+    if (widget.zoomable) {
+      return InteractiveViewer(
+        transformationController: _zoomCtrl,
+        minScale: 0.35,
+        maxScale: 3.0,
+        boundaryMargin: const EdgeInsets.all(120),
+        constrained: false,
+        child: canvas,
+      );
+    }
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       controller: _hCtrl,
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 4, 12, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeaderRow(today),
-              const SizedBox(height: 4),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSectionAxis(sections),
-                  for (var d = 0; d < _visibleDays; d++)
-                    _buildDayColumn(
-                      d,
-                      sections,
-                      placed[d],
-                      isToday: today == d,
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+      child: SingleChildScrollView(child: canvas),
     );
   }
 

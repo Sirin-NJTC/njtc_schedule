@@ -8,23 +8,28 @@
 
 ## 📦 下载安装
 
-最新版 **v1.1.14** 已发布到 GitHub Releases：
+最新版 **v1.2.0** 已发布到 GitHub Releases：
 
 **<https://github.com/Sirin-NJTC/njtc_schedule/releases/latest>**
 
 | 文件 | 体积 | versionCode | 适用 |
 | --- | --- | --- | --- |
-| `njtc-schedule-1.1.14-arm64-v8a.apk` | 19.45 MB | 2016 | **首选**，近几年绝大多数手机 |
-| `njtc-schedule-1.1.14-armeabi-v7a.apk` | 17.25 MB | 1016 | 2016 年前后的老机器 |
-| `njtc-schedule-1.1.14-x86_64.apk` | 20.89 MB | 4016 | 模拟器（Android Emulator / 安卓子系统） |
-| `njtc-schedule-1.1.14-universal.apk` | 55.17 MB | 16 | 不确定机型时用，四个架构都含 |
+| `njtc-schedule-1.2.0-arm64-v8a.apk` | 43.46 MB | 2017 | **首选**，近几年绝大多数手机 |
+| `njtc-schedule-1.2.0-armeabi-v7a.apk` | 39.31 MB | 1017 | 2016 年前后的老机器 |
+| `njtc-schedule-1.2.0-x86_64.apk` | 45.31 MB | 4017 | 模拟器（Android Emulator / 安卓子系统） |
+| `njtc-schedule-1.2.0-universal.apk` | 92.81 MB | 17 | 不确定机型时用，四个架构都含 |
+
+> 📈 **v1.2.0 起安装包大了一圈**（arm64 从 19.45 MB 涨到 43.46 MB）：离线 OCR 的
+> 中文语言模型 `chi_sim.traineddata` 12.5 MB + `eng.traineddata` 3.9 MB 随包提供
+> （**必须不压缩存放**，否则原生引擎读不了），再加上 `libtesseract.so` / `libleptonica.so`
+> 约 6.7 MB。换来的是**拍照识别课表完全离线**，不联网、不上传。
 
 > ⚠️ 这几个包用 Flutter 模板默认的 **debug 签名**，装到自己手机上用没问题，但**不能上架应用商店**
 > （换成自己的 keystore 的步骤见 `BUILD_NOTES.md`）。
 >
 > ⚠️ **v1.1.13 的 Release 里混进了一个 85 MB 的 `app-arm64-v8a-debug.apk`**（传包时把
 > `build/app/outputs/flutter-apk/` 下的 debug 产物也一起带上了；CI 的 release.yml 只传
-> `*-release.apk`）。请以 **v1.1.14** 的四个包为准，v1.1.13 的页面仅作历史留存。
+> `*-release.apk`）。请以 **v1.2.0** 的四个包为准，v1.1.13 的页面仅作历史留存。
 
 推 `v*` 标签会自动出包：`.github/workflows/release.yml` 会跑 `flutter analyze` → `flutter test`
 → 构建四个 ABI → 传成 Release 资产。若要在本地重建并上传，用 `D:\DSH\github_release.ps1`
@@ -32,16 +37,23 @@
 
 ## ✨ 功能特性
 
-- 📥 **课程表导入**（三种方式）
+- 📥 **课程表导入**（四种方式）
   - **网页登录导入**（推荐）：应用内直接打开教务系统网页，**像浏览器一样登录**
     （学校教务**无需 VPN**），登录后点「读取课表」即可抓取当前课表页并自动解析。
     抓取有**两条路**：优先直接请求教务的数据接口（正方 jwglxt 的
     `xskbcx_cxXskbcxIndex.html?doType=query&gnmkdm=N2151`，拿到的是**整学期**
     原始数据，比抠页面稳），接口不可用时自动回落到解析渲染后的表格
     （学校把教务挂在**反向代理域名**下时，会自动从 URL 里反推出真实接口地址再请求）
-  - **文件导入**：直接从教务系统导出的 **老式 `.xls`** 或 `.xlsx` 课程表文件导入，
-    自动识别课程名、教师、地点、周次、节次、单双周、课程代码、教学班
+  - **文件导入**：支持教务系统导出的 **老式 `.xls`**、`.xlsx`，以及 **`.docx` / `.doc` /
+    `.pdf` / 网页（`.html`）/ 纯文本** 课程表；自动识别课程名、教师、地点、周次、节次、
+    单双周、课程代码、教学班。`.docx`、`.doc`、`.html`、`.txt` 都是**纯 Dart 本地解析**
+    （自带的 zip / OLE2 / RTF / HTML 读取器），不依赖任何在线服务
+  - **拍照 / 相册 OCR**：把课表截图或纸质课表**拍下来**直接识别成课表 ——
+    识别用的是 **Tesseract（中文 + 英文模型）**，**全程在本机离线完成，不联网、不上传**
+    （语言模型随安装包提供，首次使用会从安装包复制到应用目录）
   - **粘贴文本**：把课表单元格内容复制粘贴进来即可解析
+- 🔍 **课表全览**：首页右上角「全览」把**本周放大成一整页**，左右箭头翻周、
+  双指缩放看细节；只翻全览页自己的周次，**不会带动首页**（点「回到本周」即可复位）
 - ✏️ **手动增删改**：导入缺了教师或教室时，可以自己补 —— 首页右上角「＋」新增，
   点课程格子进详情后可**编辑 / 删除**；保存后课程提醒会**自动重排**
 - ⏰ **课程提醒**（无需联网、无需服务器）
@@ -101,6 +113,17 @@
 > 两张截图都是**在本项目真实运行的 App 上**截取的（Android 模拟器 API 37），
 > 不是效果图。左侧截图为导入真实教务系统 `智26.8课表.xls` 后的渲染结果。
 
+### v1.2.0 新增功能（真机实测截图）
+
+| 课表全览（本周放大成一整页） | 导入页（文件 / OCR 入口） | 识别结果确认（真机 OCR 置信度 83%） |
+| --- | --- | --- |
+| ![课表全览](screenshots/overview_v120.png) | ![导入页](screenshots/import_ocr_v120.png) | ![识别结果](screenshots/ocr_result_v120.png) |
+
+> 三张都是在 **vivo 真机（Android 17 / arm64）** 上、装着作者本人真实课表的状态下截的：
+> 全览页里周二 / 今天两列正好是**国庆假期**（列头写「放假」、格子里的课被淡化）；
+> 第三张是「拍照 / 相册 OCR」跑完后的确认框 —— 识别**在本机离线完成**，
+> 文字可以直接改，确认无误才会解析导入（截图里故意点了「取消」，没有动真实课表）。
+
 ### 免安装网页预览
 
 仓库根目录的 **`preview.html`** 是用真实课表数据 + 与本项目完全一致的解析 / 颜色 /
@@ -144,7 +167,7 @@ flutter run -d <device-id>
 
 ```bash
 flutter analyze   # 应当输出 No issues found!
-flutter test      # 229 个用例全部通过
+flutter test      # 272 个用例全部通过
 ```
 
 `test/widget_layout_whitelist_test.dart` 会扫描 `android/app/src/main/res/layout/widget_*.xml`，
@@ -170,6 +193,10 @@ flutter test integration_test/web_import_e2e_test.dart -d <device-id>
 # 网页导入（正方 jwglxt 数据接口路径）：用能应答 POST 的固件服务
 python tool/jwglxt_fixture_server.py 8138
 flutter test integration_test/jwglxt_json_e2e_test.dart -d <device-id>
+
+# 本地离线 OCR（图片 / PDF）：先把 PDF 夹具推进设备（图片那条自己画图，不用夹具）
+adb push test/fixtures/ocr_sample.pdf /storage/emulated/0/Android/data/cn.edu.njtc.njtc_schedule/files/
+flutter test integration_test/ocr_e2e_test.dart -d emulator-5554
 
 # 网页导入（反向代理形态 = 内江师范真实地址）：
 #   真机上固件服务在宿主机，要先反投端口，再覆盖固件地址
@@ -259,6 +286,29 @@ flutter build appbundle --release
 > 两条路径最终都交给 `TimetableParser.parseGrid` 变成课程。若遇到极端格式，
 > 可在 Excel / WPS 中「另存为 `.xlsx`」后重试，或改用「粘贴课程表文本」。
 
+除表格文件外，导入页的**「导入课表文件」**还认这几种（都从**文件头**判断，不看后缀）：
+
+| 文件 | 怎么读的 |
+| --- | --- |
+| `.docx` | 纯 Dart 解 zip → 读 `word/document.xml` → 表格按行列取回（`docx_reader.dart`） |
+| `.doc`（老版 Word） | 纯 Dart 扫 OLE2 容器里的 UTF-16 文本流（`doc_reader.dart`）；捞不出字会明确提示换格式 |
+| `.pdf` | 交给系统 `PdfRenderer` 逐页渲染成位图，再走本机 OCR（不需要联网） |
+| `.html` / `.htm` | 纯 Dart 去标签、把表格的 `</td>` 当列分隔、还原实体（教务网页「另存为」也能导入） |
+| `.rtf` | 纯 Dart 解析 RTF（含 `\uNNNN` 与 `\'hh` GBK 转义） |
+| `.txt` / 其它 | 按 UTF-8 / UTF-16 / GBK 依次嗅探编码后当文本解析 |
+
+### 导入课程表（备选二：拍照 / 相册 OCR）
+
+1. 导入页 → **「拍照 / 相册 OCR 识别」**（第一次用会从安装包把语言模型复制到应用目录，稍等几秒）
+2. 对着课表**拍一张**，或从相册选一张课表截图（建议拍正、光线均匀、字别太小）
+3. 识别完会弹一个**可编辑的文本框**：先看一眼有没有错字，改完再点「解析导入」
+   （置信度低于 60% 时会提示「请核对识别结果」）
+
+> OCR 用的是 **Tesseract `chi_sim+eng`**，通过 `tesseract4android` 在本机跑，
+> **不联网、不上传任何图片**；语言模型（约 16 MB）随安装包提供，
+> 仓库里不提交模型文件（`android/app/src/main/assets/tessdata/` 在 `.gitignore` 里），
+> 自己从源码构建前请先跑 `tool/fetch_tessdata.ps1` 或看 CI 里那一步。
+
 ### 设置当前周
 
 - 导入后若页脚缺失（例如粘贴导入），在「设置」页手动设置**学期起始日期**，
@@ -329,6 +379,10 @@ njtc_schedule/
 │   │   ├── widget_service.dart          # MethodChannel 把课表推给桌面小组件
 │   │   ├── zf_html_parser.dart          # 正方解析（#kbtable/.kbcontent、jwglxt JSON 接口、多级兜底）
 │   │   ├── holiday_sync_service.dart    # 节假日联网更新（解析 / 补班日推导 / 按年份合并）
+│   │   ├── ocr_service.dart             # 本地离线 OCR 的 Dart 侧（图片 / PDF → 文字）
+│   │   ├── document_parser.dart         # 文本 → 课表（编码嗅探 / 网格与自由文本两路）
+│   │   ├── docx_reader.dart             # 纯 Dart 读 .docx（解 zip → word/document.xml）
+│   │   ├── doc_reader.dart              # 纯 Dart 读 .doc（OLE2 里捞 UTF-16）/ RTF / HTML
 │   │   └── jwxt_service.dart            # 网页登录导入（WebView → 抓取 → 解析链路）
 │   ├── storage/
 │   │   ├── timetable_store.dart         # 课表本地持久化
@@ -337,8 +391,9 @@ njtc_schedule/
 │   │   ├── holiday_store.dart           # 节假日 / 补班日的持久化
 │   │   └── reminder_store.dart          # 提醒偏好本地持久化
 │   ├── pages/
-│   │   ├── home_page.dart               # 首页（课表视图 + 周次选择器 + 倒计时 + 提醒入口）
-│   │   ├── import_page.dart             # 导入页（网页登录 / 文件 / 粘贴）
+│   │   ├── home_page.dart               # 首页（课表视图 + 周次选择器 + 倒计时 + 全览/提醒入口）
+│   │   ├── week_overview_page.dart      # 课表全览（整周一页、双指缩放、左右翻周）
+│   │   ├── import_page.dart             # 导入页（网页登录 / 文件 / 图片 OCR / 粘贴）
 │   │   ├── course_edit_page.dart        # 手动添加 / 编辑 / 删除单门课程
 │   │   ├── period_settings_page.dart    # 节次上下课时间自定义
 │   │   ├── holiday_settings_page.dart   # 法定节假日 / 调休补班日
@@ -386,12 +441,19 @@ njtc_schedule/
 │   ├── holiday_calendar_test.dart       # 节假日日历：wire 格式 / 内置日历 / 存储 / AppState
 │   ├── holiday_sync_test.dart           # 节假日联网更新：解析 / 补班日推导 / 合并 / 失败结局
 │   ├── holiday_settings_test.dart       # 设置页与节假日页的交互（含联网更新按钮）
+│   ├── week_overview_page_test.dart     # 课表全览页（翻周 / 不改首页当前周 / 网格放大参数）
+│   ├── document_parser_test.dart        # 文本 → 课表（编码嗅探 / 网格 / 自由文本）
+│   ├── docx_reader_test.dart            # .docx 解 zip 取表格（格内分隔用 `/` 不能用制表符）
+│   ├── doc_reader_test.dart             # .doc（OLE2 捞 UTF-16）/ RTF / HTML 读取
+│   ├── ocr_service_test.dart            # OCR 通道形状（mock MethodChannel，含不支持平台）
 │   ├── widget_service_test.dart         # 桌面小组件推送（通道形状 / 异常吞掉 / 平台开关）
 │   ├── widget_layout_whitelist_test.dart# 守住宿主 inflate：布局只能用 RemoteViews 白名单控件
 │   ├── webimport_jsdom_payload_test.dart # 抓取脚本真 DOM 载荷 → 解析（整页 vs 载荷 逐门比对）
 │   └── fixtures/
 │       ├── njtc_sample.xls              # 真实教务系统导出样例（回归固件）
 │       ├── zf_xskb_list.html            # 正方课表页固件
+│       ├── ocr_sample.png               # OCR 夹具：课表两行字（tool/make_ocr_fixture.py 生成）
+│       ├── ocr_sample.pdf               # OCR 夹具：同一张图存成 PDF（验 PdfRenderer 渲染）
 │       └── extract_payload_jsdom.json   # 抓取脚本在真 DOM（jsdom）上跑出来的载荷
 ├── integration_test/
 │   ├── reminder_e2e_test.dart           # 真机端到端：排闹钟 → 发通知 → superx 字段
@@ -400,8 +462,10 @@ njtc_schedule/
 │   ├── jwglxt_json_e2e_test.dart        # 真机端到端：WebView 打教务数据接口 → 解析成课表
 │   ├── jwglxt_proxy_e2e_test.dart       # 真机端到端：反向代理形态（内江师范真实地址）
 │   └── widget_render_e2e_test.dart      # 真机端到端：把小组件「会画成什么样」问出来（探针）
+│   └── ocr_e2e_test.dart                # 真机端到端：tessdata 随包落地 + 图片/PDF 真识别
 ├── tool/
 │   ├── jwglxt_fixture_server.py         # 正方数据接口 + 反向代理固件服务（仅测试用）
+│   ├── make_ocr_fixture.py              # 生成 OCR 夹具（课表 PNG + 同图 PDF，Pillow）
 │   └── make_widget_preview.py           # 生成小组件预览图（Pillow，纯离线）
 ├── screenshots/                         # 真机实测截图
 ├── android/                             # 平台工程（已生成）
@@ -418,11 +482,15 @@ Android SDK 36）上实测：
 
 - `flutter pub get` —— 依赖解析成功
 - `flutter analyze` —— **No issues found!**
-- `flutter test` —— **229 个用例全部通过**（课表解析 / 自带 `.xls` 读取器 / 正方 HTML 解析 /
+- `flutter test` —— **272 个用例全部通过**（课表解析 / 自带 `.xls` 读取器 / 正方 HTML 解析 /
   网页导入解析链路 / 抓取脚本真 DOM 载荷回归 / 课表网格冲突并排 / **连堂课块撑满所占节次** /
   **显示开关（周六日、非本周课程）** / **节假日日历（放假日 / 补班日 / 持久化）** /
   **节假日联网更新（真实接口返回体解析 / 补班日推导 / 按年份合并 / 启动静默同步的节流与保护）** /
   **改日历必须推桌面小组件（三条路径的回归）** / **跨长假的「下一节课」扫描** /
+  **课表全览页（翻周不改首页当前周 / 网格放大参数 / 复位缩放）** /
+  **文本 → 课表（UTF-8·UTF-16·GBK 编码嗅探 / 网格与自由文本两路）** /
+  **`.docx` 解 zip 取表格（格内分隔用 `/`，用制表符会把地点串到下一列）** /
+  **`.doc`（OLE2 里捞 UTF-16）/ RTF / HTML 读取** / **OCR 通道形状（mock 通道，含不支持平台的提示）** /
   首页周次选择器 / 手动增删改课程 / 节次时间自定义 / 桌面小组件推送 / 小组件布局白名单 /
   **周次换算（含「startDate 带时间分量」的回归）** / **出厂作息升级迁移**）
 - **抓取脚本 `EXTRACT_JS` 在真 DOM（jsdom）上跑通**：`node D:\DSH\_verify\verify_extract_pipeline.mjs`
@@ -495,6 +563,20 @@ Android SDK 36）上实测：
   **写文件回传路径** → Dart 侧解析出 **9 门课程**（学期 `2026-2027年第1学期`、
   专业 `机器人工程`、起始日 `2026-08-31`、总周数 20），教师 / 地点 / 周次 / 节次
   全部正确
+- **v1.2.0 三项新功能都在设备上跑过**：
+  - **课表全览**：真机（vivo V2520A / Android 17 / arm64）进入后整周一页、
+    翻周箭头与「回到本周」正常，放假那几天的格子按 `active=false` 淡化显示
+    （见 `screenshots/overview_v120.png`）
+  - **多格式导入**：`.docx` / `.doc` / `.pdf` / `.html` / `.rtf` / `.txt`
+    各有单测（含 OLE2、RTF 转义、HTML 实体、GBK 嗅探），共 35 条
+  - **离线 OCR**：`integration_test/ocr_e2e_test.dart` 在 Android 17 / API 37
+    模拟器上 **`All tests passed!`（4/4）** —— 语言模型从安装包复制到应用目录、
+    图片识别出「星期一 高等数学 明德楼A103 (3-4节)7-18周」（置信度 82%）、
+    PDF 经系统 `PdfRenderer` 逐页识别、坏字节抛 `OcrException` 而不是崩溃；
+    真机 arm64 上从相册选图识别，确认框显示 **置信度 83%**、文字可编辑
+    （见 `screenshots/ocr_result_v120.png`）
+  - `flutter analyze` **0 issue**、`flutter test` **272 passed**（22 个单元测试文件
+    + 7 个 `integration_test/*_e2e_test.dart`）
 
 > ⚠️ 上述 release APK 使用 Flutter 模板默认的 **debug 签名**，可直接安装到手机使用，
 > 但**不能上架应用商店**。正式发布请按 [BUILD_NOTES.md](BUILD_NOTES.md) 第 6 节

@@ -1,6 +1,7 @@
 package cn.edu.njtc.njtc_schedule
 
 import android.content.Intent
+import cn.edu.njtc.njtc_schedule.ocr.OcrBridge
 import cn.edu.njtc.njtc_schedule.reminder.NotificationFactory
 import cn.edu.njtc.njtc_schedule.reminder.ReminderBridge
 import cn.edu.njtc.njtc_schedule.webimport.WebImportBridge
@@ -26,6 +27,8 @@ class MainActivity : FlutterActivity() {
         }
         // 桌面小组件桥：接收课表/节次时间的 JSON 并刷新小组件
         WidgetBridge(this, flutterEngine.dartExecutor.binaryMessenger)
+        // 离线 OCR / PDF 识别桥（图片、扫描版 PDF 导入）
+        OcrBridge(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     @Deprecated("Deprecated in Java")

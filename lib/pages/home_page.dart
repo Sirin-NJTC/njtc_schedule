@@ -83,6 +83,8 @@ class HomePage extends StatelessWidget {
               // 故意把 ticker 收在这一小块上，别让它带着整张网格一起重建。
               MinuteTicker(builder: (_, now) => _buildCountdown(state, tt, now)),
               const SizedBox(width: 4),
+              _buildOverviewButton(context),
+              const SizedBox(width: 4),
               _buildAddButton(context),
               const SizedBox(width: 4),
               _buildReminderButton(context, state),
@@ -169,6 +171,29 @@ class HomePage extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// 右上角「课表全览」入口：整周放大一页看，可双指缩放、左右翻周。
+  Widget _buildOverviewButton(BuildContext context) {
+    return Tooltip(
+      message: '课表全览（放大看整周）',
+      child: InkWell(
+        onTap: () => Navigator.pushNamed(context, '/overview'),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(9),
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.grid_view_rounded,
+            size: 20,
+            color: AppTheme.primary,
+          ),
+        ),
       ),
     );
   }

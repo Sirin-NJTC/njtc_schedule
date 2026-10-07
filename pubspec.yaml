@@ -1,7 +1,7 @@
 name: njtc_schedule
 description: 内江师范学院课程表 - 美观的课程表应用，支持教务系统导入
 publish_to: 'none'
-version: 1.1.14+16
+version: 1.2.0+17
 
 environment:
   sdk: '>=3.6.0 <4.0.0'
@@ -28,6 +28,9 @@ dependencies:
   http: ^1.2.1
   # 图标字体
   cupertino_icons: ^1.0.8
+  archive: ^3.6.1
+  xml: ^6.6.1
+  enough_convert: ^1.7.1
 
 dev_dependencies:
   flutter_test:
@@ -39,3 +42,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    # 只给 integration_test/ocr_e2e_test.dart 用：`flutter test integration_test/...`
+    # 会在跑之前**卸载重装** App，所以推到设备共享目录的夹具活不到测试开始
+    # （见 BUILD_NOTES §9.22）。33KB，直接打进包里最省事；图片那条用例是
+    # 在设备上现画 PNG，不需要夹具。
+    - test/fixtures/ocr_sample.pdf

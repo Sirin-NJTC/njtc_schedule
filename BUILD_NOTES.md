@@ -2244,3 +2244,183 @@ v1.1.13 的 Release 里资产叫 `app-arm64-v8a-release.apk` 这种 Gradle 原�
   不划算。网络那条路径已经真机跑通，三条路径调用的是同一个 `_pushWidget()`。
 
 
+## 9.22 v1.2.0 —— 课表全览 + 多格式导入（doc/docx/pdf/网页/文本）+ 本地离线 OCR
+
+用户在 1.1.14 之后追加了三件事：
+
+1. 「课表放大全览展示」；
+2. 「导入支持 doc/docx/pdf 等更多格式」；
+3. 「本地离线图片 OCR 导入」（离线、不联网、不上传）。
+
+三件事凑一版，`pubspec.yaml` 从 `1.1.14+16` 直接跳到 **`1.2.0+17`**（功能级改动，
+不是修 bug，所以升 minor）。单测 229 → **272**，E2E 从 6 个文件变 **7 个**。
+
+### 9.22.1 课表全览：复用同一张网格，交给 InteractiveViewer
+
+需求是「课表太小，想放大看整周」。**没有新写渲染代码**，而是把既有网格参数化：
+
+* `lib/widgets/timetable_grid.dart` 的 widget 新增三个字段：
+  `dayWidth`、`sectionHeight`、`zoomable`，默认值就是原来写死的
+  `defaultDayWidth = 118`、`defaultSectionHeight = 74`（`zoomable = false`）。
+  State 里原来的 `static const double dayWidth / sectionHeight` 改成
+  `double get dayWidth => widget.dayWidth;` 这样的转发 getter，
+  **整套布局算式一行没动**——这是「复用而不是重写」的关键，改完首页像素级不变。
+* 全览页 `lib/pages/week_overview_page.dart` 传 `dayWidth: 176, sectionHeight: 112,
+  zoomable: true`，缩放交给
+  `InteractiveViewer(minScale: 0.35, maxScale: 3.0, boundaryMargin: EdgeInsets.all(120),
+  constrained: false)`。
+* **坑**：`zoomable` 模式下必须去掉网格内部原来那两层 `SingleChildScrollView`。
+  留着的话，横向那层会先把拖动事件吃掉，`InteractiveViewer` 永远收不到手势，
+  表现是「双指缩放能用、单指拖动却纹丝不动」。所以 `build()` 里是二选一：
+  zoomable 走 `InteractiveViewer`，否则走原来的两层滚动。
+* **复位缩放**：「复位缩放」按钮想复位的是网格内部的 `TransformationController`，
+  页面拿不到它。做法是 `KeyedSubtree(key: ValueKey('week-overview-$_resetToken'))`，
+  点按钮 `_resetToken++` 换 key → 网格整棵重建 → 缩放自然回到 1.0。
+  比重写控制器省事，也不破坏封装。
+* 翻周只改页面自己的 `int? _week`（`null` = 跟随首页当前周），**绝不动
+  `AppState.currentWeek`**：全览页翻到第 5 周，返回首页还得是本周。
+  这条写成了用例（翻周后断言 `state.currentWeek` 没变）。
+* 入口在首页头部：`Icons.grid_view_rounded` → `Navigator.pushNamed('/overview')`
+  （命名路由注册在 `lib/main.dart`）。
+
+### 9.22.2 多格式导入：先看文件头，再分流
+
+`lib/pages/import_page.dart` 里统一收口到 `_importBytes(name, bytes)`，
+按**文件头**（不信后缀，用户改过后缀的文件太多了）分流：
+
+| 文件头 / 特征 | 走哪条路 |
+| --- | --- |
+| `D0 CF 11 E0 A1 B1 1A E1`（OLE2） | 自带 `XlsReader`（老 .xls）；捞不到课表时再试 `DocReader.ole2ToText` |
+| `50 4B 03 04`（zip） | 里面是 `word/document.xml` → `DocxReader`；否则 `excel` 包（.xlsx） |
+| `%PDF-` | `OcrService.recognizePdf`（系统 PdfRenderer 渲染后 OCR） |
+| `\x89PNG` / `\xFF\xD8\xFF` / `GIF8` / `BM` / `RIFF….WEBP` | `OcrService.recognizeImage` |
+| `{\rtf` | `DocReader.rtfToText` |
+| `<html` / `<table` | 去标签，`</td>` 之间当分列 |
+| 其它 | `DocumentParser.decodeText`（BOM → UTF-8 → GBK 依次嗅探） |
+
+新增的三个「读者」都在 `lib/services/` 下：`document_parser.dart`（编码嗅探 +
+`parseFreeText` 入口）、`docx_reader.dart`（自己解 zip + `word/document.xml`，
+不引第三方 docx 包）、`doc_reader.dart`（.doc 的 OLE2 文本流 + RTF 控制字）。
+
+两个踩出来的坑：
+
+* **`.docx` 单元格里的制表符不能当换行更不能当分列**。第一版把 `w:tab` 翻译成 `\t`，
+  于是「课名 / 周次 / 地点 / 教师」被 `TimetableParser.parseGrid` 当成**换了一列**，
+  地点整个消失（用例里 `math.location` 期望 `明德楼A103`、实际空字符串才暴露）。
+  现在 `_table` 把格内各段用 `/` 拼起来——`/` 正是 `parseCell` 认的分隔符，
+  绕一圈刚好接上既有解析器。
+* **`.doc` 挖不出文本时要返回 `null`**，不能返回空串：返回空串界面走的是
+  「解析出 0 门课」，返回 `null` 才能提示「这个文件读不出文字，换个格式试试」。
+  另外老 .doc 的正文是 UTF-16LE，`0x0D` 是「这一行结束」的信号——
+  自己合成测试夹具时两行之间必须插一个 `0x0D`，否则两行会被粘成一句。
+
+### 9.22.3 离线 OCR：tesseract4android + 系统自带的 PdfRenderer
+
+* 引擎选 **JitPack 上的 `cz.adaptech.tesseract4android:tesseract4android:4.9.0`**
+  （`android/build.gradle.kts` 加 jitpack 仓库）。
+  **为什么不用 pdfrx / pdfium**：那条路要把 native assets / build hooks 引进构建链，
+  Windows 本地还得开开发者模式，CI 也跟着脆。PDF 干脆交给 Android 自带的
+  `PdfRenderer` 渲染成位图再 OCR——文字版 PDF 和扫描版走同一条路，APK 也不涨体积。
+* 语言模型：`chi_sim`（tessdata_best，12.5MB）+ `eng`（tessdata_fast，3.9MB）。
+  **不进仓库**（`.gitignore` 里忽略 `android/app/src/main/assets/tessdata/`）；
+  本地用 `tool/fetch_tessdata.ps1` 拉，CI 在 `flutter analyze` 之前下载（见 `.github/workflows/release.yml`）。
+* 运行时 `OcrBridge.ensureTessData()` 把 assets 复制到 `filesDir/tessdata/`
+  （Tesseract 只认这种目录结构），大小一致就跳过；
+  `setVariable("preserve_interword_spaces", "1")`——课表靠列间距分列，丢了空格没法还原；
+  `psm = 6`；超大图降采样、小图放大；PDF 每页按 1600px 宽渲染、**先铺白底**
+  （`PdfRenderer` 渲染出来是透明底，不铺白底 OCR 会当成黑底），最多取 8 页。
+* OCR 全程在后台线程（`runAsync`），识别完 post 回主线程；结果先给用户过一眼
+  （「确认识别结果」对话框）再解析导入，因为 OCR 出来的文字总有几处要手改。
+
+### 9.22.4 Kotlin / AGP 踩坑（本轮最费时间的一节）
+
+1. **KDoc 里的 `/*` 会开一个嵌套注释**。Kotlin 支持嵌套块注释，注释里写
+   `assets/tessdata/*.traineddata` 就等于开了一个永不闭合的注释，
+   整个文件报 `Syntax error: Unclosed comment`，**报的位置还是文件末尾**，
+   查了半天才发现问题在文档注释里。→ 改成写「`assets/tessdata/` 下的
+   `.traineddata` 文件」。
+2. **第三方 API 别凭记忆写**。`TessBaseAPI` 没有 `end()`（用 `recycle()`）、
+   `meanConfidence` 是方法不是属性、`getUTF8Text()` 在 Kotlin 里不会合成
+   `utF8Text`。这些直接从 AAR 里 `javap` 出来看，一分钟的事：
+   ```
+   javap -classpath <解压后的 classes.jar> com.googlecode.tesseract.android.TessBaseAPI
+   ```
+3. **`traineddata` 必须 `noCompress`**。AGP 默认压缩 assets，
+   `assets.openFd()` 读压缩过的条目会抛
+   `This file can not be opened as a file descriptor; it is probably compressed`。
+   **这个错误的表现极具误导性**：`recognizeImage` 里我有 try/catch，异常被翻译成中文错误；
+   而 `info` 是裸的 `result.success(info())`，异常从 handler 里抛出去，
+   Dart 侧看到的是 **`MissingPluginException`**——看起来像「桥没注册」，
+   差点往 MethodChannel 名字、`GeneratedPluginRegistrant` 方向查。
+   修法两层：`android { androidResources { noCompress += "traineddata" } }`，
+   并且把 handler 整体包 try/catch 回 `result.error(...)`——
+   **桥里任何异常都不许「什么都不回」**，那会把原生异常伪装成协议错误。
+4. 置信度那个真 bug：`recognizeBitmap()` 先 `engine.clear()` 再让调用方取
+   `meanConfidence()`，而 `clear()` 会把识别结果一起清掉，于是**置信度恒为 0**，
+   界面上「识别置信度偏低，请核对」的提示就永远挂着。
+   现在改成 `private fun recognizeBitmap(...): Pair<String, Int>`，
+   在 `clear()` **之前**把 `meanConfidence()` 取走。
+
+### 9.22.5 测试与 E2E
+
+* 单测 229 → 272：`test/document_parser_test.dart`、`test/docx_reader_test.dart`、
+  `test/doc_reader_test.dart`、`test/ocr_service_test.dart`、`test/week_overview_page_test.dart`。
+  OCR 那条在单测里只测**通道层**（用 `OcrService.override` 假的 MethodChannel 返回），
+  真引擎留给 E2E。
+* `test/week_overview_page_test.dart` 一开始红：内置节假日日历把国庆那一周整体标成放假，
+  网格里这些课 `active = false`，而 `showInactiveCourses` 默认 false ⇒ 课被整个滤掉，
+  `find.byType(CourseCard)` 当然找不到。用例里补一句
+  `await state.updateHolidays(const HolidayCalendar())` 把日历清空即可——
+  这些用例只关心全览页本身，不需要跟节假日撞车。
+* 原生 E2E `integration_test/ocr_e2e_test.dart`（模拟器上跑，App 会被卸载重装）：
+  * 「图片 OCR」**自带输入**：用 `ui.PictureRecorder` + `TextPainter` 现场画两行课表
+    再喂给 OCR，所以不依赖任何夹具，也不受分区存储限制；
+  * 「PDF OCR」的夹具 `test/fixtures/ocr_sample.pdf`（`tool/make_ocr_fixture.py`
+    用 Pillow 生成，同时生成 PNG）**作为 asset 打进包**。原因是踩出来的：
+    `flutter test integration_test/...` 跑之前会**卸载重装 App**，
+    `adb push` 到 `/sdcard/Android/data/<pkg>/files/` 的夹具根本活不到测试开始
+    （第一次跑打印的就是「跳过 PDF 用例」）。33KB 换这条用例自包含，值。
+  * `OcrService.info()` 是原样透传原生 map：字段是
+    `channel` / `tessdataDir` / `files`（`{name: {assetBytes, installed}}`）/ `languages`。
+    写断言时别按 `langs` / `models` 猜（第一版就是这么猜错的）。
+  * 真跑证据（模拟器 API 37）：
+    ```
+    OCR info → {channel: cn.edu.njtc.njtc_schedule/ocr,
+                tessdataDir: /data/user/0/cn.edu.njtc.njtc_schedule/files/tessdata,
+                files: {chi_sim.traineddata: {assetBytes: 13077423, installed: false},
+                        eng.traineddata: {assetBytes: 4113088, installed: false}},
+                languages: chi_sim+eng}
+    OCR 图片 → 1888x432
+      星期一 高等数学 明德楼A103 (3-4节)7-18周
+      星期二 Python程序设计 格致楼205 (5-673)7-18/4)
+    OCR PDF  → 共 1 页，识别 1 页
+    ```
+    最后一串括号里的数字被认花了——**这是 OCR 的正常水平，也是「先让用户过一眼」
+    那个确认框存在的原因**；用例只断言稳定的那几个词（课名、星期几）。
+* **真机（vivo V2520A / Android 17 / arm64）冒烟**：模拟器是 x86_64，
+  tesseract 的 **arm64 原生库只有真机才验证得到**，所以这一趟不能省。
+  `adb install -r` 覆盖安装后 `versionCode=2017`、**课表与设置全部保留**、
+  桌面小组件照旧；进「导入课程表 → 拍照 / 相册 OCR 识别」，从相册选一张图，
+  跑完弹「确认识别结果」**置信度 83% (1440×3168)**、文字可编辑 —— 离线 OCR 在真机上成立。
+  冒烟时**只点「取消」**：这台机器上装的是真实课表，点「解析导入」会把用户的课表覆盖掉。
+* 顺手记两条 adb 交互的坑（下次别重踩）：
+  * `read_image` 给的预览是 878×1932，设备是 1440×3168 ⇒
+    **预览坐标要 ×1.64 才是 `adb shell input tap` 的坐标**（截图说明里那个 ×1.04 是对
+    1380×3036 的 normalized 副本而言）。按 ×1.04 算会把点击打到课表网格上，
+    弹出课程详情弹窗，白折腾两轮。
+  * 底部导航「导入」在 1440×3168 上大约是 `input tap 566 3050`；
+    模态弹层用 `input keyevent KEYCODE_BACK` **关不掉**，点遮罩（如 `720 300`）才关。
+  * 截图务必 `screencap -p /sdcard/x.png` + `adb pull`；`adb exec-out screencap -p > x.png`
+    经 PowerShell 重定向会写出坏 PNG。
+
+### 9.22.6 教训
+
+* 现象和原因之间可能隔着好几层：`MissingPluginException` ← handler 抛异常 ←
+  assets 被压缩 ← `openFd` 不支持压缩条目。**报错原文先原样读一遍再定方向**，
+  别急着往最熟悉的那条猜测上套。
+* 测试夹具「放哪儿」是由测试运行方式决定的：会卸载重装的 E2E，
+  夹具只能跟着 APK 走（asset），共享目录里的东西活不过安装。
+* 复用比重写便宜：全览页能做到零像素回归，靠的是「网格只加参数、不改算式」。
+
+
+

@@ -11,6 +11,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart';
 import '../app_state.dart';
 import '../models/timetable.dart';
+import '../services/doc_reader.dart';
+import '../services/docx_reader.dart';
+import '../services/document_parser.dart';
+import '../services/ocr_service.dart';
 import '../services/timetable_parser.dart';
 import '../services/xls_reader.dart';
 import '../services/jwxt_service.dart';
@@ -71,10 +75,18 @@ class _ImportPageState extends State<ImportPage> {
                 const SizedBox(height: 12),
                 _buildMethodCard(
                   icon: Icons.upload_file,
-                  title: '导入教务系统导出的文件',
-                  subtitle: '在教务系统「课程表」页面导出 .xls/.xlsx 文件后导入',
+                  title: '导入课表文件',
+                  subtitle: '支持 .xls / .xlsx / .docx / .doc / .pdf / 图片 / .txt',
                   onTap: _pickFile,
                   color: AppTheme.secondary,
+                ),
+                const SizedBox(height: 12),
+                _buildMethodCard(
+                  icon: Icons.photo_camera,
+                  title: '拍照 / 相册 OCR 识别',
+                  subtitle: '拍下纸质课表或课表截图，离线识别成文字后导入',
+                  onTap: _pickImage,
+                  color: AppTheme.accent,
                 ),
                 const SizedBox(height: 12),
                 _buildMethodCard(
@@ -318,49 +330,224 @@ class _ImportPageState extends State<ImportPage> {
 
   // ------------------------------------------------------------ 文件导入
 
-  /// 选择文件导入。
+  /// 文件导入支持的后缀（界面提示与 file_picker 的限制用同一份）。
+  static const List<String> _fileExtensions = [
+    'xls', 'xlsx', // 教务系统导出，最准
+    'docx', 'doc', 'rtf', 'html', 'htm', 'txt', 'csv', // 文档/网页/文本
+    'pdf', // 渲染 + OCR
+    'png', 'jpg', 'jpeg', 'webp', 'bmp', // 图片 OCR
+  ];
+
+  static const List<String> _imageExtensions = [
+    'png', 'jpg', 'jpeg', 'webp', 'bmp', 'heic', 'heif', 'gif',
+  ];
+
+  static String _extOf(String fileName) {
+    final i = fileName.lastIndexOf('.');
+    return i < 0 ? '' : fileName.substring(i + 1).toLowerCase();
+  }
+
+  static String _baseName(String fileName) {
+    final i = fileName.lastIndexOf('.');
+    return i <= 0 ? fileName : fileName.substring(0, i);
+  }
+
+  /// 选择文件导入（xls/xlsx/docx/doc/pdf/图片/txt…）。
   Future<void> _pickFile() async {
     setState(() {
       _loading = true;
-      _loadingText = '正在解析课表…';
+      _loadingText = '正在读取文件…';
     });
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['xls', 'xlsx'],
+        allowedExtensions: _fileExtensions,
         withData: true,
       );
-      if (result == null || result.files.isEmpty) {
-        setState(() => _loading = false);
-        return;
-      }
-
+      if (result == null || result.files.isEmpty) return;
       final file = result.files.first;
       final bytes = file.bytes;
       if (bytes == null) {
         _showError('无法读取文件');
-        setState(() => _loading = false);
         return;
       }
-
-      final grid = _parseExcel(bytes);
-      if (grid.isEmpty) {
-        _showError('解析失败：无法识别该文件格式。\n'
-            '请确认是教务系统「课程表」页面导出的 .xls/.xlsx 文件；'
-            '若文件已损坏，可在 Excel/WPS 中「另存为 .xlsx」后重试，'
-            '或改用「粘贴课程表文本」方式导入。');
-        setState(() => _loading = false);
-        return;
-      }
-
-      final tt = TimetableParser.parseGrid(grid,
-          name: file.name.replaceAll(RegExp(r'\.(xls|xlsx)$'), ''));
-      await _saveAndGo(tt);
+      await _importBytes(_extOf(file.name), _baseName(file.name), bytes);
     } catch (e) {
       _showError('导入失败：$e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// 拍照 / 相册 OCR 导入。
+  Future<void> _pickImage() async {
+    setState(() {
+      _loading = true;
+      _loadingText = '正在打开相册…';
+    });
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null) {
+        _showError('无法读取这张图片');
+        return;
+      }
+      await _importBytes(_extOf(file.name), _baseName(file.name), bytes);
+    } catch (e) {
+      _showError('导入失败：$e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// 按后缀（必要时按内容）分发到具体解析路径，最后都汇到 [_saveAndGo]。
+  Future<void> _importBytes(String ext, String name, Uint8List bytes) async {
+    // ① Excel：教务系统标准导出，走老路
+    if (ext == 'xls' || ext == 'xlsx' || XlsReader.looksLikeXls(bytes)) {
+      final grid = _parseExcel(bytes);
+      if (grid.isEmpty) {
+        _showError('解析失败：无法识别该表格文件。\n'
+            '请确认是教务系统「课程表」页面导出的 .xls/.xlsx 文件；'
+            '若文件已损坏，可在 Excel/WPS 中「另存为 .xlsx」后重试，'
+            '或改用「粘贴课程表文本」方式导入。');
+        return;
+      }
+      await _saveAndGo(TimetableParser.parseGrid(grid, name: name));
+      return;
+    }
+
+    // ② PDF：原生 PdfRenderer 逐页渲染 + 离线 OCR（文字版/扫描版同一条路）
+    if (ext == 'pdf') {
+      if (!OcrService.supported) {
+        _showError('PDF 识别依赖手机本地 OCR，目前只支持 Android。');
+        return;
+      }
+      setState(() => _loadingText = '正在离线识别 PDF（逐页渲染 + OCR，可能要等几秒）…');
+      final r = await OcrService.recognizePdf(bytes);
+      final text = r.truncated
+          ? '${r.text}\n（这份 PDF 共 ${r.pages} 页，本次只识别了前 ${r.recognizedPages} 页）'
+          : r.text;
+      if (text.trim().isEmpty) {
+        _showError('这份 PDF 没能识别出文字。\n'
+            '如果是整页图片的扫描件，可以试试单独截屏后用「拍照 / 相册 OCR 识别」。');
+        return;
+      }
+      await _reviewThenImport(
+        text,
+        name,
+        hint: 'PDF 识别结果（共 ${r.pages} 页，识别 ${r.recognizedPages} 页）。'
+            '识别难免有错字，下面可以直接改，确认后再解析：',
+      );
+      return;
+    }
+
+    // ③ 图片：离线 OCR
+    if (_imageExtensions.contains(ext)) {
+      if (!OcrService.supported) {
+        _showError('图片识别依赖手机本地 OCR，目前只支持 Android。');
+        return;
+      }
+      setState(() => _loadingText = '正在离线识别图片（首次会先解压语言模型）…');
+      final r = await OcrService.recognizeImage(bytes);
+      if (r.text.trim().isEmpty) {
+        _showError('这张图没能识别出文字。\n'
+            '尽量裁掉无关部分、保证文字清晰，或换成教务系统导出的文件导入。');
+        return;
+      }
+      final weak = r.confidence < 60 ? '⚠️ 识别置信度只有 ${r.confidence}%，请仔细核对。' : '';
+      await _reviewThenImport(
+        r.text,
+        name,
+        hint: '识别置信度 ${r.confidence}%（${r.width}×${r.height}）。$weak'
+            '下面可以直接修改，确认后再解析：',
+      );
+      return;
+    }
+
+    // ④ 文档 / 网页 / 文本
+    final text = _readDocumentText(ext, bytes);
+    if (text == null || text.trim().isEmpty) {
+      _showError('没能从这个文件里读出文字。\n'
+          '支持 .docx / .doc / .rtf / .html / .txt / .csv；'
+          '老式 .doc 结构千奇百怪，建议在 Word/WPS 里「另存为 .docx」后重试，'
+          '或直接截屏用「拍照 / 相册 OCR 识别」。');
+      return;
+    }
+    await _saveAndGo(DocumentParser.parse(text, name: name));
+  }
+
+  /// 文档 → 文字。docx 用 zip 解析；老 .doc/RTF/HTML/纯文本交给 [DocReader] 猜。
+  String? _readDocumentText(String ext, Uint8List bytes) {
+    if (ext == 'docx') {
+      final text = DocxReader.readText(bytes);
+      if (text != null && text.trim().isNotEmpty) return text;
+      // 后缀写成 .docx 但其实是 RTF/HTML（教务系统干得出来）时再猜一次
+      if (!DocxReader.looksLikeZip(bytes)) return DocReader.readText(bytes);
+      return null;
+    }
+    return DocReader.readText(bytes);
+  }
+
+  /// OCR 结果先给用户过一眼、能改，再解析 —— 识别错字直接改掉比事后编辑课程省事。
+  Future<void> _reviewThenImport(
+    String text,
+    String name, {
+    required String hint,
+  }) async {
+    final controller = TextEditingController(text: text);
+    if (mounted) setState(() => _loading = false);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认识别结果'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(hint,
+                  style: const TextStyle(fontSize: 12, color: Colors.black54)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: controller,
+                maxLines: 10,
+                style: const TextStyle(fontSize: 13),
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('解析导入'),
+          ),
+        ],
+      ),
+    );
+    final edited = controller.text;
+    controller.dispose();
+    if (confirmed != true) return;
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadingText = '正在解析…';
+      });
+    }
+    await _saveAndGo(DocumentParser.parse(edited, name: name));
   }
 
   /// 解析导入的文件字节为二维字符串表。

@@ -36,12 +36,27 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    androidResources {
+        // tessdata/*.traineddata 必须**不压缩**打进 APK：OcrBridge 用
+        // `assets.openFd()` 读模型大小（只认未压缩的条目），压缩过的资产会抛
+        // 「This file can not be opened as a file descriptor; it is probably compressed」，
+        // 结果连 info() 都拿不到（表现为 Dart 侧 MissingPluginException）。见 §9.22。
+        noCompress += "traineddata"
+    }
 }
 
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
+}
+
+dependencies {
+    // 离线 OCR 引擎（Tesseract 4）。语言模型（tessdata/*.traineddata）**不进仓库**，
+    // 由 tool/fetch_tessdata.ps1（本地）或 CI 在构建前下载到
+    // android/app/src/main/assets/tessdata/，见 .gitignore 与 BUILD_NOTES §9.22。
+    implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
 }
 
 flutter {
