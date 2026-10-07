@@ -2188,4 +2188,21 @@ v1.1.13 的 Release 里资产叫 `app-arm64-v8a-release.apk` 这种 Gradle 原�
   universal 55.17 MB / code 16，armeabi-v7a 17.25 MB / 1016，arm64-v8a 19.45 MB / 2016，
   x86_64 20.89 MB / 4016。
 
+### 9.21.7 推送与 CI 出包（v1.1.14 已发布）
+
+* 提交 `909e615`（15 文件、+595/−42）→ `git push origin main`（`4992760..909e615`）；
+  再推 annotated 标签 `v1.1.14`，触发 GitHub Actions
+  [run 37577079553](https://github.com/Sirin-NJTC/njtc_schedule/actions/runs/37577079553)
+  → `success`，13 个步骤全绿（含新增的「统一资产名（ASCII）」那一步）。
+* Release [v1.1.14](https://github.com/Sirin-NJTC/njtc_schedule/releases/tag/v1.1.14)（id 405418137）
+  **正好 4 个资产、没有 debug 包**：
+  `njtc-schedule-1.1.14-universal.apk` 55.18 MB、`-arm64-v8a.apk` 19.45 MB、
+  `-armeabi-v7a.apk` 17.26 MB、`-x86_64.apk` 20.89 MB（CI 与本地体积略有出入属不同构建环境，正常）。
+* 匿名 `HEAD` 验证下载地址可用：
+  `…/releases/download/v1.1.14/njtc-schedule-1.1.14-arm64-v8a.apk` → `200`、
+  `Content-Length=20399694`、`Content-Type=application/vnd.android.package-archive`。
+* 纯文档提交（如本段）不会触发 `release.yml`——它只认 `v*` 标签；标签仍指向 `909e615`。
+* 本轮**没有真机验证**：构建、E2E 全在模拟器 `Medium_Phone_API_37.0` 上跑，
+  vivo 手机 `10CG681D4N004KB` 当时没插（`adb devices` 为空）。
+
 
