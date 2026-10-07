@@ -2683,6 +2683,49 @@ UTF-8 文本（临时 `test/_dump_fixture_test.dart` 写文件，用完即删）
 生成器因此**逐格写同样的文字、不声明合并**（`xlwt.write_merge` 会让被合并格读出来是空的），
 这样 `XlsReader` 读到的网格与真实文件一致；打开文件时表头看起来重复，属于已知取舍。
 
+## 9.26 重写 git 历史把真机截图与真实固件从历史里抹掉（以及它的边界）
+
+**起因**：§9.24 / §9.25 只是把文件从**最新提交**里删掉，历史和 tag 里还留着 —— 用户要求
+「彻底清掉」，于是重写历史。
+
+**做法（2026-10-07，仓库当时只有 17 个提交）**：
+1. **先备份**：`git bundle create D:\DSH\njtc_schedule_backup.bundle --all`（14.5 MB，
+   含全部分支与 5 个 tag；出问题可以用它还原）。
+2. **把 10 张模拟器截图先拷出仓库**（`D:\DSH\shots_repo_backup\`），因为下一步会把
+   `screenshots/` 整目录从**所有**提交里剔除 —— 里面的旧路径（`01-timetable-grid.png` 等）
+   既有新的安全版本、也有被覆盖前的真机版本，只能整目录先清、事后再把安全的那版加回来。
+3. **重写**：`FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch --force --index-filter
+   'git rm -r --cached --ignore-unmatch --quiet screenshots test/fixtures/njtc_sample.xls'
+   --tag-name-filter cat -- --all`。**故意不加 `--prune-empty`**，免得把 tag 指向的提交弄空
+   （打 tag 的那个提交必须还在，否则 tag 会被丢弃）。
+4. **清残留**：`git for-each-ref refs/original/` 逐个 `git update-ref -d` →
+   `git reflog expire --expire=now --all` → `git gc --prune=now`。清完
+   `git log --all -- screenshots` 与 `-- test/fixtures/njtc_sample.xls` 都必须是 0 条，
+   旧的 `main` 提交 `git cat-file -t <sha>` 应该报 `Not a valid object name`。
+5. **把安全截图加回来**：重新 `git add screenshots/` 提交一次（新提交里只有 10 张模拟器图）。
+6. **强推**：`git push --force origin main` + `git push --force --tags origin`。
+   5 个 tag 全部 forced update；**tag 是「更新」而不是删除重建**，所以 GitHub Release 与资产
+   都没掉（核对 `releases/tags/v1.3.0`：4 个 APK、体积与本地一致）。强推后**没有触发新的
+   workflow run**（`actions/runs` 里仍是最初那 5 次）。
+
+**边界（重要，别以为重写完就干净了）**：GitHub 对**不再被任何 ref 引用**的对象不会立刻删除，
+一段时间内仍然**可以按完整 SHA 取到**。重写后实测（匿名 API）：
+* `GET /repos/Sirin-NJTC/njtc_schedule/commits/7c94fd2` → **仍然返回 200**（那是重写前的 main）；
+* `GET /contents/screenshots?ref=a96a89c` → 仍然列出 11 张，**含 `widget_ok_real_device.png`
+  这些真机图**；`GET /contents/test/fixtures/njtc_sample.xls?ref=a96a89c` → 仍然给出
+  34816 字节的原始导出文件。
+
+也就是说：`force push` **不等于**「从 GitHub 上消失」，只是从分支 / tag 上摘掉了。真要立刻
+消失，只有两条路：
+1. **联系 GitHub Support**（privacy / sensitive data 请求），请他们跑一次 GC 清掉悬空对象；
+2. **删库重建**（同名的公开仓库可以再建、Release 用 `D:\DSH\github_release.ps1` 重传、
+   代码从 `D:\DSH\njtc_schedule_backup.bundle` 或本地仓库推上去），代价是 star / issue /
+   watch / 旧链接与 CI 历史都没了。
+
+**教训**：个人信息**第一次就不该进公开仓库**。截图、导出文件、日志粘贴之前先问一句
+「这是不是别人的 / 我自己的真实数据」；一旦进了远端，靠删提交是治不了的（红线 16）。
+
+
 
 
 
