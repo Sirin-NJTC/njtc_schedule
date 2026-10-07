@@ -99,8 +99,10 @@ $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 
     x86_64 release 包 → `screencap` + `pull`；OCR 那张的输入用
     `tool/make_demo_timetable_photo.py` 生成。**别把任何真机截图提交上去**，
     桌面小组件那张也只放应用内的启用说明页（真机桌面会带壁纸与桌面图标）。
-    ⚠️ 另一个同类隐患：`test/fixtures/njtc_sample.xls` 是**真实教务系统导出**（含真实课程/教师/教室），
-    两个测试依赖它 —— 动它之前先想清楚要不要换成合成固件。
+    ⚠️ 测试固件同理：`test/fixtures/sample_timetable.xls` **必须是合成的**
+    （结构与真实教务导出对齐、内容全虚构，由 `tool/make_xls_fixture.py` 生成，
+    改字段就改脚本重新生成 + 同步 `test/xls_reader_test.dart`、`test/app_flow_test.dart`
+    里的期望值）。**别再往仓库里放真实教务导出的 .xls**，那里面有真实课程 / 教师 / 教室。
 
 ## 发布
 

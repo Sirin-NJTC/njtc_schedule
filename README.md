@@ -491,7 +491,7 @@ njtc_schedule/
 │   ├── widget_layout_whitelist_test.dart# 守住宿主 inflate：布局只能用 RemoteViews 白名单控件
 │   ├── webimport_jsdom_payload_test.dart # 抓取脚本真 DOM 载荷 → 解析（整页 vs 载荷 逐门比对）
 │   └── fixtures/
-│       ├── njtc_sample.xls              # 真实教务系统导出样例（回归固件）
+│       ├── sample_timetable.xls         # 合成课表固件（结构与真实导出对齐、内容全虚构，tool/make_xls_fixture.py 生成）
 │       ├── zf_xskb_list.html            # 正方课表页固件
 │       ├── ocr_sample.png               # OCR 夹具：课表两行字（tool/make_ocr_fixture.py 生成）
 │       ├── ocr_sample.pdf               # OCR 夹具：同一张图存成 PDF（验 PdfRenderer 渲染）
@@ -547,8 +547,7 @@ Android SDK 36）上实测：
   - 接口路（`integration_test/jwglxt_json_e2e_test.dart`，模拟器 API 37）：
     `已从教务接口识别 6 门课`，接口 4 行 `kbList` → 6 门课（离散周次拆成
     `1-1`/`3-3`/`5-9`），单双周保留。
-  - **反向代理路（`integration_test/jwglxt_proxy_e2e_test.dart`，真机 vivo V2520A /
-    Android 17）**：学校真实地址是
+  - **反向代理路（`integration_test/jwglxt_proxy_e2e_test.dart`，Android 17 真机）**：学校真实地址是
     `…/sso/driotlogin?url=kbcx%252Fxskbcx_cxXskbcxIndex.html%253F…`（真地址在
     `url=` 里、双层编码，路径里没有 `/kbcx/`）。两种落地方式（原地吐页面 / 302 跳转）
     都推出同一个数据接口 `/kbcx/xskbcx_cxXsKb.html`，各拿到 6 门课；固件侧的
@@ -556,7 +555,7 @@ Android SDK 36）上实测：
   - **页面里有课也仍然优先打接口**（页面只渲染一屏时，接口给的才是整学期；
     接口失败会回落到页面 DOM，不会让用户空手而归）——这条曾经被写成死代码，见
     `BUILD_NOTES.md` §9.12 / §9.13。
-- **桌面小组件在真机上真的画出来了**（vivo V2520A / Android 17，v1.1.9）：
+- **桌面小组件在真机上真的画出来了**（Android 17 真机，v1.1.9）：
   - 先在模拟器上用探针问出真因 —— `RemoteViews` 只允许白名单控件，布局里的裸 `<View>`
     颜色条让宿主抛 `InflateException: Class not allowed to be inflated android.view.View`，
     整块布局画不出来 ⇒ 桌面只剩一张白卡（1.1.6~1.1.8 一直如此）；

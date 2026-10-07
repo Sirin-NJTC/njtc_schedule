@@ -1,7 +1,10 @@
 /// `XlsReader` 的单元测试。
 ///
-/// 用**真实教务系统导出的 .xls**（`test/fixtures/njtc_sample.xls`）作为样例，
-/// 保证「下载下来的文件直接就能导入」这条链路不会被后续改动破坏。
+/// 用**合成的 .xls 固件**（`test/fixtures/sample_timetable.xls`）作为样例：
+/// 它的结构、字段顺序、合并单元格读出来的样子都和真实教务系统导出的
+/// .xls（OLE2 / BIFF8）一致，但课程 / 教师 / 教室全是虚构的
+/// （`示例课程甲` / `示例老师A` / `示例楼B201`），可以放心放在公开仓库里。
+/// 固件由 `tool/make_xls_fixture.py` 生成（依赖 `xlwt`）。
 ///
 /// 说明：`excel` 包只支持 .xlsx（zip + XML），读不了教务系统这种老式
 /// .xls（OLE2 / BIFF8），所以 `lib/services/xls_reader.dart` 里自己实现了读取。
@@ -34,8 +37,8 @@ void main() {
     });
   });
 
-  group('XlsReader 读取真实课表文件', () {
-    final file = File('test/fixtures/njtc_sample.xls');
+  group('XlsReader 读取课表固件', () {
+    final file = File('test/fixtures/sample_timetable.xls');
 
     test('读出完整的 8×9 网格', () {
       if (!file.existsSync()) {
@@ -46,12 +49,12 @@ void main() {
           Uint8List.fromList(file.readAsBytesSync()));
 
       expect(grid, isNotNull);
-      expect(grid!.length, 8, reason: '真实课表共 8 行');
-      expect(grid.first.length, 9, reason: '真实课表共 9 列');
+      expect(grid!.length, 8, reason: '固件共 8 行');
+      expect(grid.first.length, 9, reason: '固件共 9 列');
 
       // 表头
       expect(grid[0][0], '2026-2027年第1学期');
-      expect(grid[0][7], '专业：机器人工程');
+      expect(grid[0][7], '专业：示例工程');
       expect(grid[1][0], '节次');
       expect(grid[1][2], '星期一');
       expect(grid[1][8], '星期日');
@@ -67,10 +70,10 @@ void main() {
 
       // 单元格内容：完整保留了 课程/(节次)周次/ 地点/教师/课程代码/教学班 各字段
       final cell = grid[2][2];
-      expect(cell.contains('人工智能导论'), true);
+      expect(cell.contains('示例课程甲'), true);
       expect(cell.contains('(1-2节)7-18周'), true);
-      expect(cell.contains('明德楼B216'), true);
-      expect(cell.contains('ZB1040282-07'), true);
+      expect(cell.contains('示例楼B201'), true);
+      expect(cell.contains('AA0000001-01'), true);
 
       // 一格多课：单元格内用 \r\n 分隔
       expect(grid[4][3].contains('\r\n'), true, reason: '周二 5-6 节有单双周两门课');
@@ -88,7 +91,7 @@ void main() {
 
       final tt = TimetableParser.parseGrid(grid!);
       expect(tt.semester, '2026-2027年第1学期');
-      expect(tt.major, '机器人工程');
+      expect(tt.major, '示例工程');
       expect(tt.courses.length, 20);
 
       final days = tt.courses.map((c) => c.dayOfWeek).toSet().toList()..sort();

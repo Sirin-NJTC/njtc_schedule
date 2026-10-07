@@ -140,8 +140,9 @@ flutter test      # 期望：All tests passed!（87 个用例）
 
 * `test/timetable_parser_test.dart` —— 解析器单元测试（含一格多课、单双周、
   页脚学期起始日期与总周数、以及「周次不得退化」「时间字段不在第 0 段」两条回归用例）
-* `test/xls_reader_test.dart` —— 用 `test/fixtures/njtc_sample.xls`
-  （真实教务系统导出文件）验证 `.xls` 读取链路
+* `test/xls_reader_test.dart` —— 用 `test/fixtures/sample_timetable.xls`
+  （**合成的** .xls 固件，结构与真实教务系统导出对齐、内容全虚构；
+  由 `tool/make_xls_fixture.py` 生成，见 §9.25）验证 `.xls` 读取链路
 * `test/zf_html_parser_test.dart` —— 用 `test/fixtures/zf_xskb_list.html`
   （正方教务课表页固件）验证 HTML 解析器：rowspan/colspan 不重复计课、
   `<hr>` 与 `-----` 两种分格多课写法、`title` 字段（教师 / 周次(节次) / 地点 / 教学班）、
@@ -519,6 +520,9 @@ adb shell appops set cn.edu.njtc.njtc_schedule SCHEDULE_EXACT_ALARM allow
    选中文件。结果：课表标题 `njtc_sample`、副标题
    `2026-2027年第1学期 · 机器人工程`，网格正常渲染、`今天` 列高亮、
    底部导航出现 ⇒ release 构建的自研 BIFF8 `.xls` 读取器与解析器可用。
+   *（2026-10-07 补注：当初拿来冒烟的是作者本人真实教务导出的固件，按 §9.25
+   已换成合成固件 `test/fixtures/sample_timetable.xls`；上面这行结果记录的是
+   当时的真实样例，保留不改。）*
 2. **提醒排布**：设置页「课程提醒」显示
    `提前 30 / 15 / 5 分钟 · 下节课预告 · 已排布 55 个` ⇒ release 构建的
    Kotlin 排布链路（MethodChannel → `ReminderScheduler`）可用。
@@ -1557,7 +1561,8 @@ child: Stack(
   并排冲突课各自撑满（并排时宽度均分）。
 * `flutter analyze` → **No issues found**；`flutter test --reporter compact` → **126 用例全绿**（123 + 3）。
 * **把真实课表渲染成 PNG 肉眼看一遍**：临时写了个 `test/zz_render_preview_test.dart`
-  （用完即删），用 `XlsReader` + `TimetableParser` 读真实 `test/fixtures/njtc_sample.xls`，
+  （用完即删），用 `XlsReader` + `TimetableParser` 读当时的 `test/fixtures/njtc_sample.xls`
+  （**真实导出固件，已按 §9.25 换成合成的 `sample_timetable.xls`**），
   再 `RenderRepaintBoundary.toImage()` 导出了一张对照图（`screenshots/grid_span_fix_110.png`，
   **因来自真实课表已删**，见 §9.24；现在同样效果的对照图见 `screenshots/01-timetable-grid.png`）。
   图里每一块课程都**正好铺满它占的两行**（含右上角单双周角标），
@@ -2644,6 +2649,40 @@ v1.1.13 的 Release 里资产叫 `app-arm64-v8a-release.apk` 这种 Gradle 原�
 * 交互坐标（1080×2400）：底部导航「课表 / 导入 / 切换 / 设置」≈ x 143 / 432 / 666 / 926，y 2271；
   首页头部三个按钮（课表全览 / 加号 / 铃铛）≈ (759, 189) / (879, 189) / (999, 189)；
   设置页「法定节假日」≈ (619, 1724)、「桌面小组件」≈ (619, 1976)。
+
+## 9.25 测试固件也换掉：真实教务导出 → 合成 `.xls`
+
+**起因**：处理 §9.24 时顺手盘了一遍「仓库里还有哪些自己的真实数据」，发现
+`test/fixtures/njtc_sample.xls`（34816 字节）是**作者本人教务系统导出的原始文件** ——
+里面是真实课程名、任课教师、上课教室、课程代码、教学班，而且它从 v1.0 起就在公开仓库里。
+同样属于该清理的个人信息，用户确认后一并换成合成固件。
+
+**做法**：
+1. **写生成器 `tool/make_xls_fixture.py`**（Pillow 无关，依赖 `xlwt` 写 BIFF8，`pip install xlwt`）。
+   它输出的 `test/fixtures/sample_timetable.xls`（9728 字节）**结构与真实导出逐格对齐**：
+   8 行 × 9 列（第 0 行 学期 / 课表名 / 专业；第 1 行 `节次` + 星期一~星期日；
+   第 2~6 行 5 个大节「上午/下午/晚上 × 节次一~五」；第 7 行 `注--` 页脚），
+   单元格文本仍是 `课程/(节次)周次/ 地点/教师/课程代码/教学班`，一格多课仍用 `\r\n` 分隔。
+2. **内容全虚构**：课程 `示例课程甲`~`示例课程癸`、教师 `示例老师A~J`、
+   教室 `示例楼A101` / `示例楼B201` / `示例操场01`、课程代码 `AA0000001-01`…、
+   教学班 `演示26.7;演示26.8`；专业 `示例工程`、课表名 `演示26.8课表`。
+   **课程数（20）、单双周分布、周次区间、同格多课的位置全部照旧**，所以两个测试的
+   「15 张卡片」「20 门课」「第 9 周单周」这些数字一个都不用改，只改期望里的课程名。
+3. **同步两个测试**：`test/xls_reader_test.dart`（路径 + 表头 / 单元格期望 + 文案从「真实」改「固件」）、
+   `test/app_flow_test.dart`（路径 + `name: '演示26.8课表'` + 专业 + 渲染断言里的课程名 +
+   单双周用例的课程名 + 顶部注释）。删掉旧固件 `njtc_sample.xls`。
+4. **文档同步**：`README.md` 项目结构里的固件说明、`AGENTS.md` 红线 16 的警示改成
+   「固件必须是合成的」、`BUILD_NOTES.md` 里 4 处历史引用改成「当时用的是真实固件，已按 §9.25 换掉」。
+
+**怎么造「和真实导出一样」的固件**：先把旧固件用 `XlsReader` + `TimetableParser` dump 成
+UTF-8 文本（临时 `test/_dump_fixture_test.dart` 写文件，用完即删），照抄行/列结构、字段顺序、
+合并单元格读出来的重复文本特征，再逐格替换成虚构内容；生成后**再用同一个 dump 脚本读一遍**，
+逐条核对行数、列数、课程数、单双周、`\r\n` 分隔是否与预期一致。
+
+**注意**：真实文件的合并单元格在读取时表现为「每个被合并格子里都是同一段文字」，
+生成器因此**逐格写同样的文字、不声明合并**（`xlwt.write_merge` 会让被合并格读出来是空的），
+这样 `XlsReader` 读到的网格与真实文件一致；打开文件时表头看起来重复，属于已知取舍。
+
 
 
 
