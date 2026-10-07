@@ -407,8 +407,13 @@ class _ImportPageState extends State<ImportPage> {
 
   /// 按后缀（必要时按内容）分发到具体解析路径，最后都汇到 [_saveAndGo]。
   Future<void> _importBytes(String ext, String name, Uint8List bytes) async {
-    // ① Excel：教务系统标准导出，走老路
-    if (ext == 'xls' || ext == 'xlsx' || XlsReader.looksLikeXls(bytes)) {
+    // ① Excel：教务系统标准导出，走老路。
+    //    内容嗅探要排除 Word：.doc 和 .xls 的魔数同为 OLE2，真 Word 97 的
+    //    .doc 误进这条分支只会报「无法识别该表格文件」（ole2ToText 就白写了）。
+    final spreadsheet = ext == 'xls' ||
+        ext == 'xlsx' ||
+        (XlsReader.looksLikeXls(bytes) && !DocReader.looksLikeWordDoc(bytes));
+    if (spreadsheet) {
       final grid = _parseExcel(bytes);
       if (grid.isEmpty) {
         _showError('解析失败：无法识别该表格文件。\n'

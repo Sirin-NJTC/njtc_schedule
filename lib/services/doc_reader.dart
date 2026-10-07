@@ -28,6 +28,31 @@ class DocReader {
     return true;
   }
 
+  /// 这份 OLE2 字节里装的是不是 **Word 文档**（而非 Excel 工作簿）。
+  ///
+  /// `.doc` 与 `.xls` 的魔数完全一样（都是 OLE2 复合文档），靠魔数分不出；
+  /// 区别在目录项里流的名字：Word 一定有 `WordDocument` 流，Excel 一定是
+  /// `Workbook`/`Book`。流名以 UTF-16LE 存在文件里，直接搜字节就行 ——
+  /// 导入分发时靠它避免「真 Word 97 的 .doc 被当成 .xls 送进 Excel 解析」。
+  static bool looksLikeWordDoc(Uint8List bytes) {
+    if (!looksLikeOle2(bytes)) return false;
+    const needle = 'WordDocument';
+    final limit = bytes.length - needle.length * 2;
+    if (limit < 0) return false;
+    outer:
+    for (var i = 0; i <= limit; i++) {
+      if (bytes[i] != needle.codeUnitAt(0)) continue;
+      for (var j = 0; j < needle.length; j++) {
+        if (bytes[i + j * 2] != needle.codeUnitAt(j) ||
+            bytes[i + j * 2 + 1] != 0) {
+          continue outer;
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
   /// RTF 一定以 `{\rtf` 开头。
   static bool looksLikeRtf(Uint8List bytes) {
     if (bytes.length < 5) return false;

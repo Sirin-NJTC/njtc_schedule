@@ -34,6 +34,25 @@ void main() {
       expect(DocReader.looksLikeOle2(Uint8List(3)), isFalse);
     });
 
+    test('OLE2 里的 Word 靠「WordDocument」流名认出，Excel 不误伤', () {
+      // .doc 与 .xls 魔数相同；导入分发靠这个区分（见 import_page 的 ① 分支）。
+      const magic = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+      expect(
+        DocReader.looksLikeWordDoc(_u([...magic, ..._utf16le('WordDocument')])),
+        isTrue,
+      );
+      // 目录里是 Workbook 流（Excel）→ 不是 Word
+      expect(
+        DocReader.looksLikeWordDoc(_u([...magic, ..._utf16le('Workbook')])),
+        isFalse,
+      );
+      // 魔数都不对 → 直接 false
+      expect(
+        DocReader.looksLikeWordDoc(_u(utf8.encode('{\\rtf1'))),
+        isFalse,
+      );
+    });
+
     test('RTF 一定以 {\\rtf 开头', () {
       expect(DocReader.looksLikeRtf(_u(utf8.encode('{\\rtf1\\ansi x}'))), isTrue);
       expect(DocReader.looksLikeRtf(_u(utf8.encode('<html>'))), isFalse);
