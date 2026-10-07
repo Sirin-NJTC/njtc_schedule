@@ -1930,7 +1930,7 @@ setup-java temurin 21、`subosito/flutter-action@v2` 固定 `flutter-version: 3.
   中文/全角括号搞乱），带 `param()` 的脚本在这种执行方式下参数不好传；改成「从 `$env:GH_PAT`
   或已有变量取默认值」。
 
-### 9.19 出厂作息换成学校统一作息（2026-05-06 起）+ 一轮代码优化
+## 9.19 出厂作息换成学校统一作息（2026-05-06 起）+ 一轮代码优化
 
 #### 9.19.1 作息改了什么
 
@@ -2031,6 +2031,7 @@ App 开着两小时，倒计时仍显示开屏那一刻的读数，红线也停�
 * `flutter analyze` → **No issues found!**
 * `flutter test` → **210 个用例全部通过**（原 196 + 新增 14：
   `semester_test.dart` 10 条、出厂作息升级迁移 3 条、原有用例改断言 1 条）
+  —— 这是**当时**的数；后续 9.20、9.21 又加了用例，当前总数为 229。
 * 受影响的 `period_settings_test` / `widget_service_test` / `timetable_grid_test` /
   `home_page_test` / `app_flow_test` 均单独跑过。
 * ⚠️ 提醒相关的**原生 E2E 没跑**（需要真机 / 模拟器）。作息时间直接影响
@@ -2067,5 +2068,124 @@ App 开着两小时，倒计时仍显示开屏那一刻的读数，红线也停�
   调休补班当天显示对应周几的课程。
 
 * 版本：`pubspec.yaml` `1.1.13+15`，`settings_page.dart` 关于页 `v1.1.13`。
+
+## 9.21 v1.1.14 —— 改日历漏推桌面小组件（回归修复）+ 倒计时跨长假期
+
+> 起因：v1.1.13 发布后用户让另一个 agent 又改了一轮，回来要求核对。复查发现两处问题：
+> 三处改日历的路径**都没把新日历推给原生小组件**（发布出去才暴露的回归），
+> 以及 `nextClassOccurrence` 的扫描窗口只有 8 天，长假结束后首页会整段空白。
+
+### 9.21.1 改日历不推小组件（v1.1.13 带出来的真 bug）
+
+v1.1.13 给 `WidgetService.sync` 加了 `holidays` 参数，并声称「三条调用点都传了」——
+实际传的只是**课表变更**那条路径。另有三处会改 `_holidays`：
+
+* `AppState.updateHolidays()`（设置页手动改 / 导入）
+* `AppState.resetHolidays()`（恢复内置日历）
+* `AppState.syncHolidaysFromNetwork()`（启动时的静默联网同步）
+
+它们此前只调 `syncReminders()`，于是桌面小组件继续拿**旧日历**画：放假那天照样把课画出来，
+补班日照旧按原来的周几画。手动点「立即联网更新」之所以看起来正常，是因为设置页那条路径
+自己又单独调了一次 `sync`，把漏掉的那次掩盖过去了。
+
+修法：把「推小组件」收敛成一个私有出口，凡是动了课表 / 节次 / 日历的地方都从这一个口出去：
+
+```dart
+void _pushWidget() {
+  // 故意不 await：widget 测试里没桩时那个 Future 会一直挂着，
+  // 一 await 就把 pumpAndSettle() 拖死（和 _syncAfterChange 是同一个坑）。
+  unawaited(WidgetService.sync(timetable: _active, holidays: _holidays));
+}
+```
+
+`updateHolidays()` / `resetHolidays()` / `syncHolidaysFromNetwork()`（**静默同步也要推**，
+它不走 `notifyListeners`）以及 `init()` 全部改走它；`_syncAfterChange()` 也改成先推小组件
+再排提醒。
+
+回归用例（`test/holiday_sync_test.dart` 新 group「日历变了就要推给桌面小组件（回归：曾经漏掉）」）：
+mock 掉 `cn.edu.njtc.njtc_schedule/widget` 通道收集 `update` 调用，三条分别断言
+手动改日历 / 恢复内置 / 静默联网之后收到的 `h`、`m` 载荷（联网那条断言 36 天放假、6 天补班）。
+
+### 9.21.2 长假之后首页什么都不显示
+
+`nextClassOccurrence` 的窗口是 `scanDays = 8`（含今天，即只看 7 天）。春节 / 国庆叠中秋
+这类假可以连放 9 天以上，会把窗口整段盖住 → 返回 null；旧代码此时直接 `SizedBox.shrink()`，
+于是**整个假期首页那块都是空的**，用户看不出发生了什么。
+
+* 窗口放宽到 **21 天**（3 周足够跨过最长假期；越界只会多扫几天，代价可以忽略）。
+* 找不到下一节课时不再什么都不显示：如果今天正是放假日，就显示「今天放假 · <节假日名>」
+  （新的 `_buildCountdownIdle`），与网格表头、桌面小组件同一套说法；其余情况
+  （学期没开始 / 学期结束 / 课表本来就没课）保持原样什么都不显示。
+* 顺手修 `_dayLabel`：间隔 ≥ 3 天的现在写成「M月D日 周X」——长假之后只写「周一」，
+  根本看不出是哪一周。
+
+回归用例：`test/semester_test.dart` 加「连放 9 天假（春节那种）也能找到假期后的第一节课」
+（带 `scanDays: 8` 的对照组，钉住「窗口必须够长」这条）；`test/home_page_test.dart`
+加两条 widget 用例（放假且无课 → 「今天放假」；放假但下周有课 → 报下一节课且带日期）。
+
+### 9.21.3 文档里的测试数字过时
+
+`README.md:143`、`README.md:417`、`AGENTS.md:4`、`AGENTS.md:15` 都写「210 个用例」，
+而 v1.1.13 提交时实际已经是 223 条。同一个数字散在四处就一定会漂，本次一并改为 **229**。
+`CHANGELOG.md` 里 v1.1.12 那条「详见 9.18 / 9.19」也指错了章节（9.18 是发布流程、
+9.19 属于 v1.1.13），已改为 9.17 / 9.18。
+
+### 9.21.4 原生 E2E 里的时间写死了（v1.1.13 埋的，本轮才发现）
+
+`integration_test/reminder_e2e_test.dart` 断言「明天上午第 1 节的时段预告 = `07:30`」，
+这一串时刻（`7:30 / 7:45 / 7:55 / 8:50 / 9:35 / 9:55`）是 **08:00 那套旧作息**算出来的。
+9.19 把第 1 节挪到 **08:20** 之后，真实值变成 `07:50 / 08:05 / 08:15 / 09:10 / 09:55 / 10:15`，
+断言必然失败——但 `flutter test` **不会跑 `integration_test/`**，
+所以这十条断言从 v1.1.13 起就一直红着没人知道（`AGENTS.md` 里「动了提醒排程要跑 E2E」那条，
+当时改作息的人没执行）。
+
+修法不是把数字改成 07:50（下次再改作息还会歪），而是**从节次时间推导**：
+
+```dart
+// 断言里的时间一律从节次时间推导（periodOfSection），不要写死 07:30 这种字面量
+DateTime _startAt(int section, DateTime day) { … }
+String _before(DateTime t, int minutes) => _hm(t.subtract(Duration(minutes: minutes)));
+…
+expect(preview[0].timeText.endsWith(_before(aStart, 30)), isTrue);
+expect(preview[1].timeText.endsWith(_before(aStart, 15)), isTrue);
+expect(preview[3].timeText.endsWith(_before(a2Start, 5)), isTrue);
+expect(preview[4].timeText.endsWith(_before(a2End, 5)), isTrue);   // 下课预告
+expect(preview[5].timeText.endsWith(_before(bStart, 5)), isTrue);
+```
+
+**教训**：凡是「用户可配置的默认值」（作息时间、提前分钟数、节假日）都不该在测试里写字面量；
+再就是 `integration_test/` 不在 `flutter test` 的范围内，**改完作息必须手动跑一遍这三条原生 E2E**
+（`reminder` / `holiday_reminder` / `widget_render`），否则红了也看不见。
+
+同批核对：`integration_test/holiday_reminder_e2e_test.dart` 只用 `_dateText(tomorrow)` 比对日期、
+不比时刻，所以不受作息变更影响；`widget_render_e2e_test.dart` 两处新增用例也不写时刻。
+
+### 9.21.5 CI 出包的资产名也统一成 ASCII
+
+v1.1.13 的 Release 里资产叫 `app-arm64-v8a-release.apk` 这种 Gradle 原始名，跟本仓库
+`README.md` / `AGENTS.md` 里约定的 `njtc-schedule-<版本>-<abi>.apk` 不一致，用户下载时也分不清
+哪个是哪个。`.github/workflows/release.yml` 里加了一步「统一资产名（ASCII）」：
+从 `pubspec.yaml` 取版本号（不依赖 tag 名，`workflow_dispatch` 手动跑也对），把四个产物
+`mv` 成 `njtc-schedule-<ver>-{arm64-v8a,armeabi-v7a,x86_64,universal}.apk` 再上传，
+`files:` 用通配符匹配、`fail_on_unmatched_files: true` 兜底。
+**别在 GitHub 上给 `v1.1.13` 补传**（它已经带着那个 85 MB 的 debug 包了），本轮直接发 `v1.1.14`。
+
+另外 `v1.1.13` 的 Release 里那个 `app-arm64-v8a-debug.apk` 不是 CI 传的（`release.yml` 只列了
+`*-release.apk`），是手工传包时把 `build/app/outputs/flutter-apk/` 下的 debug 产物也带上了——
+**手工传包前先看清文件清单**。
+
+### 9.21.6 验证
+
+* `flutter analyze` → No issues found!
+* `flutter test` → **229 条全绿**（v1.1.13 的 223 + 本次新增 6）。
+* 原生 E2E（模拟器 `Medium_Phone_API_37.0` / `emulator-5554`，API 37）：
+  * `widget_render_e2e_test.dart` → **4 条全过**，探针里的放假/补班输出：
+    `{"footer":"今天放假 · 国庆节","rows":[]}`、`{"footer":"补周一 · 共 1 门…","rows":["10:20-12:00 被补出来的课@明德楼A203"]}`。
+  * `reminder_e2e_test.dart` → **1 条全过**（修掉 9.21.4 的写死时刻之后），
+    实测 `next=2026-10-08(周四) 07:50`、`scheduled=12`、`exact=true`。
+* 版本：`pubspec.yaml` `1.1.14+16`，`settings_page.dart` 关于页 `v1.1.14`。
+* 本地四个包（`D:\DSH\build_v114.ps1`，aapt2 校验过 `versionName=1.1.14`）：
+  universal 55.17 MB / code 16，armeabi-v7a 17.25 MB / 1016，arm64-v8a 19.45 MB / 2016，
+  x86_64 20.89 MB / 4016。
 
 

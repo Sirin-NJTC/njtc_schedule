@@ -14,14 +14,19 @@
 ///
 /// 本用例会**故意保留**排布好的计划与已发出的通知，方便上面两条命令复核。
 ///
-/// 课程刻意排到**明天上午**，这样三条提前提醒（7:30 / 7:45 / 7:55）一定在未来，
+/// 课程刻意排到**明天上午**，这样三条提前提醒（第 1 节开始前 30 / 15 / 5 分钟）一定在未来，
 /// 计划里必然同时出现「时段预告」「单节提醒」「下节课预告」三种条目，断言可确定。
+///
+/// ⚠️ 断言里的时间**一律从节次时间推导**（[periodOfSection]），不要写死 `07:30` 这种字面量：
+/// v1.1.13 把第 1 节从 08:00 挪到 08:20 之后，本文件原来写死的 7:30/7:45/7:55
+/// 全都失效了，而 `flutter test` 跑不到 `integration_test/`，一直没人发现（见 BUILD_NOTES §9.21.5）。
 library;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:njtc_schedule/models/course.dart';
+import 'package:njtc_schedule/models/period.dart';
 import 'package:njtc_schedule/models/reminder_prefs.dart';
 import 'package:njtc_schedule/models/timetable.dart';
 import 'package:njtc_schedule/services/reminder_service.dart';
@@ -29,6 +34,26 @@ import 'package:njtc_schedule/services/reminder_service.dart';
 const String kCourseA = '端到端测试课程A';
 const String kCourseA2 = '端到端测试课程A'; // 与 A 连堂：同名、同地点、节次紧接
 const String kCourseB = '端到端测试课程B';
+
+/// `HH:mm`，断言用的时刻文本。
+String _hm(DateTime t) =>
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+/// 第 [section] 节在 [day] 那天的上课时刻（按当前生效的节次时间）。
+DateTime _startAt(int section, DateTime day) {
+  final p = periodOfSection(section);
+  return DateTime(day.year, day.month, day.day, p.startHour, p.startMinute);
+}
+
+/// 第 [section] 节在 [day] 那天的下课时刻。
+DateTime _endAt(int section, DateTime day) {
+  final p = periodOfSection(section);
+  return DateTime(day.year, day.month, day.day, p.endHour, p.endMinute);
+}
+
+/// [t] 往前 [minutes] 分钟的 `HH:mm`。
+String _before(DateTime t, int minutes) =>
+    _hm(t.subtract(Duration(minutes: minutes)));
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -139,23 +164,38 @@ void main() {
     }
     expect(preview.length, greaterThanOrEqualTo(6));
 
-    // 明天上午第一节，7:30 的时段预告排在最前
+    // 明天上午第一节的 30 分钟档时段预告排在最前
+    final aStart = _startAt(1, tomorrow);
+    final a2Start = _startAt(2, tomorrow);
+    final a2End = _endAt(2, tomorrow);
+    final bStart = _startAt(3, tomorrow);
     expect(preview[0].kind, 'sessionPreview', reason: '30 分钟档必须是时段预告');
     expect(preview[0].courseName, kCourseA);
-    expect(preview[0].timeText.endsWith('07:30'), isTrue, reason: preview[0].timeText);
+    expect(preview[0].timeText.endsWith(_before(aStart, 30)), isTrue,
+        reason: '时段预告应落在 ${_before(aStart, 30)}：${preview[0].timeText}');
     expect(preview[0].isEnd, isFalse);
 
-    // 时间顺序：7:30 预告(A) → 7:45(A) → 7:55(A) → 8:50(A2) → 9:35 下课(A2→B) → 9:55(B)
+    // 时间顺序：时段预告(A) -30 → 15 分钟档(A) → 5 分钟档(A) → 5 分钟档(A2) → 下课预告(A2→B) → 5 分钟档(B)
     expect(
       preview.take(6).map((e) => e.kind).toList(),
       <String>['sessionPreview', 'lead', 'lead', 'lead', 'endPreview', 'lead'],
       reason: '连堂的 A 不应产生下节课预告',
     );
     expect(preview[1].courseName, kCourseA);
+    expect(preview[1].timeText.endsWith(_before(aStart, 15)), isTrue,
+        reason: '15 分钟档只给时段首课：${preview[1].timeText}');
+    expect(preview[2].timeText.endsWith(_before(aStart, 5)), isTrue,
+        reason: preview[2].timeText);
     expect(preview[3].courseName, kCourseA2);
+    expect(preview[3].timeText.endsWith(_before(a2Start, 5)), isTrue,
+        reason: preview[3].timeText);
     expect(preview[4].isEnd, isTrue);
     expect(preview[4].courseName, contains(kCourseB), reason: '下课预告应指向下一节课');
+    expect(preview[4].timeText.endsWith(_before(a2End, 5)), isTrue,
+        reason: preview[4].timeText);
     expect(preview[5].courseName, kCourseB);
+    expect(preview[5].timeText.endsWith(_before(bStart, 5)), isTrue,
+        reason: preview[5].timeText);
     // 这一整天只应有一条下节课预告（A→A2 是连堂，被正确跳过）
     expect(preview.take(6).where((e) => e.kind == 'endPreview').length, 1);
 

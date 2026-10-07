@@ -376,7 +376,7 @@ class HomePage extends StatelessWidget {
       periods: state.periods,
       from: now,
     );
-    if (next == null) return const SizedBox.shrink();
+    if (next == null) return _buildCountdownIdle(state, now);
 
     final Widget mainText;
     if (next.isToday) {
@@ -438,7 +438,45 @@ class HomePage extends StatelessWidget {
     final gap = day.difference(today).inDays;
     if (gap == 1) return '明天';
     if (gap == 2) return '后天';
-    return '周${['一', '二', '三', '四', '五', '六', '日'][target.weekday - 1]}';
+    final week = '周${['一', '二', '三', '四', '五', '六', '日'][target.weekday - 1]}';
+    // 超过两天就说不出「后天」了：只报「周X」在长假期（春节连放 8 天以上）后
+    // 会让人看不出到底是哪个 X 月 X 日，所以带上日期。
+    return gap >= 3 ? '${target.month}月${target.day}日 $week' : week;
+  }
+
+  /// 找不到下一节课时顶上来的那张卡：放假就说放假，其余情况（学期还没开始 /
+  /// 学期结束 / 课表里没课）保持和以前一样什么都不显示。
+  ///
+  /// 「今天放假」这说法与课表网格表头、桌面小组件是同一套，免得三处各说各的。
+  Widget _buildCountdownIdle(AppState state, DateTime now) {
+    final name = state.holidays.holidayName(now);
+    if (name == null) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '今天放假',
+            style: TextStyle(fontSize: 11, color: AppTheme.primary),
+          ),
+          Text(
+            name,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.primary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildBottomBar(BuildContext context, AppState state) {

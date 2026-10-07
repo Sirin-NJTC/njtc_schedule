@@ -8,19 +8,23 @@
 
 ## 📦 下载安装
 
-最新版 **v1.1.12** 已发布到 GitHub Releases：
+最新版 **v1.1.14** 已发布到 GitHub Releases：
 
 **<https://github.com/Sirin-NJTC/njtc_schedule/releases/latest>**
 
 | 文件 | 体积 | versionCode | 适用 |
 | --- | --- | --- | --- |
-| `njtc-schedule-1.1.12-arm64-v8a.apk` | 19.39 MB | 2014 | **首选**，近几年绝大多数手机 |
-| `njtc-schedule-1.1.12-armeabi-v7a.apk` | 17.25 MB | 1014 | 2016 年前后的老机器 |
-| `njtc-schedule-1.1.12-x86_64.apk` | 20.89 MB | 4014 | 模拟器（Android Emulator / 安卓子系统） |
-| `njtc-schedule-1.1.12-universal.apk` | 55.10 MB | 14 | 不确定机型时用，四个架构都含 |
+| `njtc-schedule-1.1.14-arm64-v8a.apk` | 19.45 MB | 2016 | **首选**，近几年绝大多数手机 |
+| `njtc-schedule-1.1.14-armeabi-v7a.apk` | 17.25 MB | 1016 | 2016 年前后的老机器 |
+| `njtc-schedule-1.1.14-x86_64.apk` | 20.89 MB | 4016 | 模拟器（Android Emulator / 安卓子系统） |
+| `njtc-schedule-1.1.14-universal.apk` | 55.17 MB | 16 | 不确定机型时用，四个架构都含 |
 
 > ⚠️ 这几个包用 Flutter 模板默认的 **debug 签名**，装到自己手机上用没问题，但**不能上架应用商店**
 > （换成自己的 keystore 的步骤见 `BUILD_NOTES.md`）。
+>
+> ⚠️ **v1.1.13 的 Release 里混进了一个 85 MB 的 `app-arm64-v8a-debug.apk`**（传包时把
+> `build/app/outputs/flutter-apk/` 下的 debug 产物也一起带上了；CI 的 release.yml 只传
+> `*-release.apk`）。请以 **v1.1.14** 的四个包为准，v1.1.13 的页面仅作历史留存。
 
 推 `v*` 标签会自动出包：`.github/workflows/release.yml` 会跑 `flutter analyze` → `flutter test`
 → 构建四个 ABI → 传成 Release 资产。若要在本地重建并上传，用 `D:\DSH\github_release.ps1`
@@ -140,7 +144,7 @@ flutter run -d <device-id>
 
 ```bash
 flutter analyze   # 应当输出 No issues found!
-flutter test      # 210 个用例全部通过
+flutter test      # 229 个用例全部通过
 ```
 
 `test/widget_layout_whitelist_test.dart` 会扫描 `android/app/src/main/res/layout/widget_*.xml`，
@@ -414,10 +418,11 @@ Android SDK 36）上实测：
 
 - `flutter pub get` —— 依赖解析成功
 - `flutter analyze` —— **No issues found!**
-- `flutter test` —— **210 个用例全部通过**（课表解析 / 自带 `.xls` 读取器 / 正方 HTML 解析 /
+- `flutter test` —— **229 个用例全部通过**（课表解析 / 自带 `.xls` 读取器 / 正方 HTML 解析 /
   网页导入解析链路 / 抓取脚本真 DOM 载荷回归 / 课表网格冲突并排 / **连堂课块撑满所占节次** /
   **显示开关（周六日、非本周课程）** / **节假日日历（放假日 / 补班日 / 持久化）** /
   **节假日联网更新（真实接口返回体解析 / 补班日推导 / 按年份合并 / 启动静默同步的节流与保护）** /
+  **改日历必须推桌面小组件（三条路径的回归）** / **跨长假的「下一节课」扫描** /
   首页周次选择器 / 手动增删改课程 / 节次时间自定义 / 桌面小组件推送 / 小组件布局白名单 /
   **周次换算（含「startDate 带时间分量」的回归）** / **出厂作息升级迁移**）
 - **抓取脚本 `EXTRACT_JS` 在真 DOM（jsdom）上跑通**：`node D:\DSH\_verify\verify_extract_pipeline.mjs`

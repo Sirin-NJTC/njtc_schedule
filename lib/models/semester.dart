@@ -73,6 +73,11 @@ DateTime? startOfWeek({required DateTime? startDate, required int week}) {
 /// 学期结束后（rawWeek > totalWeeks）停止扫描返回 null。
 /// 用 `DateTime(y, m, d + offset)` 做日期递进：Dart 会自动进位月份，
 /// 且不受夏令时影响（`add(Duration)` 在夏令时地区会偏一小时）。
+///
+/// [scanDays] 是窗口长度（**含今天**，即往后看 `scanDays - 1` 天）。默认 21 天
+/// 不是拍脑袋：法定假期可以连放 8 天以上（春节、国庆叠中秋），窗口只给一周
+/// 的话「整段假期都在放假 → 找不到课 → 首页倒计时整周空着」，而 3 周足够跨过
+/// 任何一段假期找到下一节课。
 class NextClassOccurrence {
   const NextClassOccurrence({
     required this.course,
@@ -96,7 +101,7 @@ NextClassOccurrence? nextClassOccurrence({
   required int totalWeeks,
   required List<Period> periods,
   required DateTime from,
-  int scanDays = 8,
+  int scanDays = 21,
 }) {
   if (startDate == null || courses.isEmpty) return null;
 

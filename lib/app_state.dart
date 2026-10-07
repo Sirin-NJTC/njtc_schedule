@@ -99,8 +99,8 @@ class AppState extends ChangeNotifier {
     await refreshReminderStatus();
     await syncReminders();
     // 桌面小组件也同步一份（它可能在 App 没启动时就被系统唤醒去画）。
-    // 同样不 await：见 _syncAfterChange 里的说明。
-    unawaited(WidgetService.sync(timetable: _active, holidays: _holidays));
+    // 同样不 await：见 _pushWidget 里的说明。
+    _pushWidget();
     // 节假日日历：从没联网更新过、或距上次超过 30 天就静默试一次。
     // 不 await（不能拖慢启动），失败什么都不改；测试环境不联网。
     if (HolidaySyncService.autoSyncEnabled && _shouldAutoSyncHolidays()) {
@@ -289,6 +289,8 @@ class AppState extends ChangeNotifier {
     await HolidayStore.save(_holidays);
     await _saveHolidayMeta(source: source, updatedAt: updatedAt);
     notifyListeners();
+    // 小组件也要跟着换日历：它画的是「今天放假就不画课」，拿着旧日历会照画。
+    _pushWidget();
     return syncReminders();
   }
 
@@ -298,6 +300,7 @@ class AppState extends ChangeNotifier {
     _holidays = HolidayCalendar.builtin();
     await _saveHolidayMeta(source: HolidayStore.sourceBuiltin);
     notifyListeners();
+    _pushWidget();
     return syncReminders();
   }
 
@@ -322,6 +325,10 @@ class AppState extends ChangeNotifier {
       updatedAt: DateTime.now(),
     );
     if (!silent) notifyListeners();
+    // 小组件也要拿到新日历（**静默同步同样要**：它不看 notifyListeners，
+    // 只有推过数据才会重画；不推的话联网换来的官方日历在桌面上要等到
+    // 下次改课表 / 重启 App 才生效）。
+    _pushWidget();
     // 静默同步也要重排：新拿到的放假日必须真的从闹钟里去掉。
     await syncReminders();
     return outcome;
@@ -396,15 +403,25 @@ class AppState extends ChangeNotifier {
 
   /// 课表变化后的静默重排：不阻塞 UI，失败也不影响本地状态。
   Future<void> _syncAfterChange() async {
-    // 桌面小组件顺带同步。**故意不 await**：它要过一次平台通道，
-    // 在 widget 测试里没有桩时那个 Future 会一直挂着，一 await 就会把
-    // `pumpAndSettle()` 拖死（轮询空转到超时）。反正它自己吞异常，
-    // 早一点晚一点画出来都无所谓。
-    unawaited(WidgetService.sync(timetable: _active, holidays: _holidays));
+    // 桌面小组件顺带同步。
+    _pushWidget();
     try {
       await syncReminders();
     } catch (_) {
       // 原生侧异常不应影响课表本身的增删改。
     }
+  }
+
+  /// 把当前课表 + 节次时间 + 节假日日历推给桌面小组件。
+  ///
+  /// **故意不 await**（调用方也别 await）：它要过一次平台通道，在 widget 测试里
+  /// 没有桩时那个 Future 会一直挂着，一 await 就会把 `pumpAndSettle()` 拖死
+  /// （轮询空转到超时）。反正它自己吞异常，早一点晚一点画出来都无所谓。
+  ///
+  /// ⚠️ 凡是会改动 [_active] / [_periods] / [_holidays] 的地方都要调它 ——
+  /// 漏一处就会出现「App 里改了、桌面上还是旧的」。节假日那三条路径
+  /// （手动改 / 恢复内置 / 联网更新）曾经就漏了。
+  void _pushWidget() {
+    unawaited(WidgetService.sync(timetable: _active, holidays: _holidays));
   }
 }

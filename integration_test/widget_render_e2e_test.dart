@@ -21,6 +21,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:njtc_schedule/models/course.dart';
+import 'package:njtc_schedule/models/holiday_calendar.dart';
 import 'package:njtc_schedule/models/timetable.dart';
 import 'package:njtc_schedule/services/widget_service.dart';
 
@@ -101,5 +102,83 @@ void main() {
     expect(rows[0], contains('明德楼B216'));
     expect(rows[1], contains('高等数学Ⅰ（上）'));
     expect(probe['footer'], contains('2 门'), reason: '页脚该说共 2 门，实际：${probe['footer']}');
+  });
+
+  testWidgets('今天放假：小组件写「今天放假」且一门课都不画（会改存档）', (tester) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final monday = today.subtract(Duration(days: now.weekday - 1));
+
+    final tt = Timetable(
+      id: 'e2e-widget-holiday',
+      name: '小组件放假测试',
+      semester: '2026-2027年第1学期',
+      totalWeeks: 20,
+      startDate: monday,
+      courses: [
+        Course(
+          name: '放假那天本来有课',
+          teacher: '韩云',
+          location: '明德楼B216',
+          dayOfWeek: now.weekday,
+          startSection: 1,
+          endSection: 2,
+          startWeek: 1,
+          endWeek: 20,
+        ),
+      ],
+    );
+    final cal = HolidayCalendar(
+      holidays: [HolidayDay(today, '国庆节')],
+    );
+
+    await WidgetService.sync(timetable: tt, holidays: cal);
+    final probe = (await WidgetService.probe())!;
+    debugPrint('小组件渲染探针（放假）= ${jsonEncode(probe)}');
+
+    expect(probe['date'], contains('${now.month}月${now.day}日'));
+    expect(probe['rows'], isEmpty, reason: '放假那天一门课都不该画出来');
+    expect(probe['footer'], contains('今天放假'));
+    expect(probe['footer'], contains('国庆节'));
+  });
+
+  testWidgets('调休补班：按被补的那个星期几排课，页脚点明补周几（会改存档）', (tester) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final monday = today.subtract(Duration(days: now.weekday - 1));
+    // 挑一个「不是今天」的星期几，课只放在那天；今天补的就是那天的课。
+    final target = now.weekday == 1 ? 2 : 1;
+
+    final tt = Timetable(
+      id: 'e2e-widget-makeup',
+      name: '小组件补班测试',
+      semester: '2026-2027年第1学期',
+      totalWeeks: 20,
+      startDate: monday,
+      courses: [
+        Course(
+          name: '被补出来的课',
+          teacher: '曾玉祥',
+          location: '明德楼A203',
+          dayOfWeek: target,
+          startSection: 3,
+          endSection: 4,
+          startWeek: 1,
+          endWeek: 20,
+        ),
+      ],
+    );
+    final cal = HolidayCalendar(
+      makeups: [MakeupDay(today, target, '补周${'一二三四五六日'[target - 1]}的课')],
+    );
+
+    await WidgetService.sync(timetable: tt, holidays: cal);
+    final probe = (await WidgetService.probe())!;
+    debugPrint('小组件渲染探针（补班）= ${jsonEncode(probe)}');
+
+    final rows = (probe['rows'] as List).cast<String>();
+    expect(rows.length, 1, reason: '补班日要按被补的那天排课，实际：$rows');
+    expect(rows.first, contains('被补出来的课'));
+    expect(probe['footer'], contains('补周${'一二三四五六日'[target - 1]}'));
   });
 }

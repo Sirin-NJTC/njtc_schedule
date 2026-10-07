@@ -56,6 +56,20 @@ jobs:
       - name: 看看产出了什么
         run: ls -lh build/app/outputs/flutter-apk/
 
+      # 资产名统一成 njtc-schedule-<版本>-<abi>.apk：
+      # 1) 名字里带 app-release 之类的原始名会让人分不清哪个是哪个；
+      # 2) 名字必须 ASCII —— Windows PowerShell 上传时 URL ?name= 里的中文会被整段丢掉（见 BUILD_NOTES §9.18）。
+      - name: 统一资产名（ASCII）
+        run: |
+          set -e
+          ver=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          cd build/app/outputs/flutter-apk
+          mv app-arm64-v8a-release.apk   "njtc-schedule-${ver}-arm64-v8a.apk"
+          mv app-armeabi-v7a-release.apk "njtc-schedule-${ver}-armeabi-v7a.apk"
+          mv app-x86_64-release.apk      "njtc-schedule-${ver}-x86_64.apk"
+          mv app-release.apk             "njtc-schedule-${ver}-universal.apk"
+          ls -lh
+
       - name: 建 Release 并上传安装包
         uses: softprops/action-gh-release@v2
         with:
@@ -68,10 +82,10 @@ jobs:
 
             | 文件 | 给谁用 |
             | --- | --- |
-            | `app-arm64-v8a-release.apk` | 绝大多数真机，首选 |
-            | `app-armeabi-v7a-release.apk` | 2016 年前后的老机器 |
-            | `app-x86_64-release.apk` | 模拟器 / 安卓子系统 |
-            | `app-release.apk` | 不确定机型时用（四个架构都含，体积最大） |
+            | `njtc-schedule-*-arm64-v8a.apk` | 绝大多数真机，首选 |
+            | `njtc-schedule-*-armeabi-v7a.apk` | 2016 年前后的老机器 |
+            | `njtc-schedule-*-x86_64.apk` | 模拟器 / 安卓子系统 |
+            | `njtc-schedule-*-universal.apk` | 不确定机型时用（四个架构都含，体积最大） |
 
             安装：浏览器下载 → 允许「安装未知应用」→ 安装。旧版本直接覆盖安装，课表和提醒设置都会保留。
 
@@ -79,8 +93,8 @@ jobs:
 
             源码、构建说明、vivo 原子通知（原子岛）接入记录都在仓库里：`README.md` / `BUILD_NOTES.md` / `VIVO_ATOMIC_NOTIFICATION.md`。
           files: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-            build/app/outputs/flutter-apk/app-x86_64-release.apk
-            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/njtc-schedule-*-arm64-v8a.apk
+            build/app/outputs/flutter-apk/njtc-schedule-*-armeabi-v7a.apk
+            build/app/outputs/flutter-apk/njtc-schedule-*-x86_64.apk
+            build/app/outputs/flutter-apk/njtc-schedule-*-universal.apk
           fail_on_unmatched_files: true

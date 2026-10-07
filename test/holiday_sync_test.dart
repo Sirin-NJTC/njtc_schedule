@@ -8,6 +8,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:njtc_schedule/app_state.dart';
 import 'package:njtc_schedule/models/holiday_calendar.dart';
@@ -368,6 +369,106 @@ void main() {
       expect(HolidaySyncService.autoSyncEnabled, isFalse);
       HolidaySyncService.forceAutoSync = true;
       expect(HolidaySyncService.autoSyncEnabled, isTrue);
+    });
+  });
+
+  group('日历变了就要推给桌面小组件（回归：曾经漏掉）', () {
+    const widgetChannel = MethodChannel('cn.edu.njtc.njtc_schedule/widget');
+    final pushes = <Map<String, dynamic>>[];
+
+    setUp(() {
+      pushes.clear();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(widgetChannel, (call) async {
+        if (call.method == 'update') {
+          pushes.add(Map<String, dynamic>.from(call.arguments as Map));
+        }
+        return true;
+      });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(widgetChannel, null);
+    });
+
+    /// 最后一次推过去的节假日载荷（没推过就是 null）。
+    Map<String, dynamic>? lastHolidays() {
+      if (pushes.isEmpty) return null;
+      final raw = pushes.last['holidays'] as String?;
+      return raw == null ? null : jsonDecode(raw) as Map<String, dynamic>;
+    }
+
+    /// 起一个干净的 AppState（不联网），再把小组件通道的调用记录清空，
+    /// 这样后面看到的推送一定是「改日历」这条路径发出来的。
+    Future<AppState> fresh() async {
+      SharedPreferences.setMockInitialValues({});
+      final state = AppState();
+      await state.init();
+      await pumpEventQueue();
+      pushes.clear();
+      return state;
+    }
+
+    test('updateHolidays：手动改完日历，立刻推一份新的给小组件', () async {
+      final state = await fresh();
+
+      await state.updateHolidays(
+        HolidayCalendar(
+          holidays: <HolidayDay>[HolidayDay(DateTime(2026, 10, 1), '国庆节')],
+          makeups: <MakeupDay>[MakeupDay(DateTime(2026, 10, 10), 3, '补周三的课')],
+        ),
+      );
+      await pumpEventQueue();
+
+      final h = lastHolidays();
+      expect(h, isNotNull, reason: '改完日历没推给小组件，桌面上还是旧日历');
+      expect(h!['h'], [
+        {'e': epochDayOf(DateTime(2026, 10, 1)), 'n': '国庆节'},
+      ]);
+      expect(h['m'], [
+        {'e': epochDayOf(DateTime(2026, 10, 10)), 'w': 3, 'n': '补周三的课'},
+      ]);
+    });
+
+    test('resetHolidays：恢复内置日历也要推', () async {
+      final state = await fresh();
+      await state.updateHolidays(
+        HolidayCalendar(
+          holidays: <HolidayDay>[HolidayDay(DateTime(2026, 10, 1), '国庆节')],
+        ),
+      );
+      await pumpEventQueue();
+      pushes.clear();
+
+      await state.resetHolidays();
+      await pumpEventQueue();
+
+      final h = lastHolidays();
+      expect(h, isNotNull);
+      expect((h!['h'] as List).length, HolidayCalendar.builtin().holidays.length);
+      expect((h['m'] as List).length, HolidayCalendar.builtin().makeups.length);
+    });
+
+    test('联网更新（静默）：官方日历也要落到小组件上', () async {
+      final state = await fresh();
+      HolidaySyncService.forceAutoSync = true;
+      HolidaySyncService.getOverride = (uri) async =>
+          uri.path.endsWith('/2027') ? json2027 : json2026;
+
+      final outcome = await state.syncHolidaysFromNetwork(silent: true);
+      await pumpEventQueue();
+
+      expect(outcome.ok, isTrue);
+      final h = lastHolidays();
+      expect(h, isNotNull, reason: '静默同步不推小组件的话，桌面要等下次改课表才更新');
+      // 2026 官方 33 天 + 内置里 2027 那 3 天（联网没覆盖的年份原样保留）
+      expect((h!['h'] as List).length, 36);
+      expect((h['m'] as List).length, 6);
+      expect(
+        (h['h'] as List).cast<Map<String, dynamic>>().map((e) => e['n']),
+        contains('国庆节'),
+      );
     });
   });
 }

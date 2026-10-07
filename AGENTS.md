@@ -1,23 +1,27 @@
 # AGENTS.md — 接手这个项目前先读这页
 
-内江师范学院课程表（Android / Flutter）。当前版本 **1.1.12+14**（`pubspec.yaml`），
-**210 个单元测试全绿**（17 个 `test/*_test.dart` + 6 个 `integration_test/*_e2e_test.dart`）。
+内江师范学院课程表（Android / Flutter）。当前版本 **1.1.14+16**（`pubspec.yaml`），
+**229 个单元测试全绿**（17 个 `test/*_test.dart` + 6 个 `integration_test/*_e2e_test.dart`）。
 
 这一页只写「接手必须知道的约定与红线」，是 [`BUILD_NOTES.md`](BUILD_NOTES.md) 里 §9.x 各轮
-踩坑记录的浓缩版。**改代码前先扫一遍 §9.16 ~ §9.18**（显示开关、节假日联网更新、发布流程），
-那里有每条约定是怎么被踩出来的。
+踩坑记录的浓缩版。**改代码前先扫一遍 §9.16 ~ §9.21**（显示开关、节假日联网更新、发布流程、
+改日历漏推小组件那个回归），那里有每条约定是怎么被踩出来的。
 
 ## 改完必须跑的验证
 
 ```powershell
 $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 flutter 3.47.6
 & $flutter analyze            # 必须 0 issue
-& $flutter test               # 必须 210 passed
+& $flutter test               # 必须 229 passed
 ```
 
 * 动了**提醒排程 / 桌面小组件 / 网页导入**这三块（Dart 与 Kotlin 都要改的那种），还要跑对应的
   原生 E2E：`& $flutter test integration_test/reminder_e2e_test.dart -d <设备>` 等。
   **这些用例会把 App 卸载重装，别拿装了真实课表的真机跑，用模拟器。**
+* **改了出厂作息（红线 8）同样要跑原生 E2E**：`flutter test` 不覆盖 `integration_test/`。
+  v1.1.13 就是把第 1 节从 08:00 改到 08:20 却没跑 E2E，`reminder_e2e_test.dart` 里写死的
+  `07:30` 那一串断言红了整版都没人发现，一直到 v1.1.14 才修（§9.21.4）。
+  **测试里别写时刻字面量**，从 `periodOfSection(...)` 推导。
 * 网页导入的两个 E2E 需要先起固件服务 `tool/jwglxt_fixture_server.py`（用法见 README「测试」）。
 * `flutter test` 之后 `GeneratedPluginRegistrant.java` 里可能残留 `integration_test` 插件，
   紧接着 `flutter build apk` 会报「程序包 dev.flutter.plugins.integration_test 不存在」——
@@ -53,6 +57,13 @@ $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 
 9. **周次换算只有 `lib/models/semester.dart` 一份**（`weekOfSemester`）。
    首页、网格、`AppState` 都调它，别再手写 `difference().inDays ~/ 7 + 1` ——
    那玩意儿会把时分秒算进去，`startDate` 一有时间分量就和别的页面算出不同的周。
+10. **凡是改了课表 / 节次 / 节假日日历，都必须走 `AppState._pushWidget()` 把数据推给原生小组件**
+   （它故意不 `await`，见方法上的注释）。v1.1.13 就是漏了 `updateHolidays()` /
+   `resetHolidays()` / `syncHolidaysFromNetwork()` 三条路径，导致**改完日历桌面小组件还在按旧日历画**，
+   直到 v1.1.14 才修（`test/holiday_sync_test.dart` 里那三条回归用例盯着这件事）。
+    改动后顺手看一眼：新增的 setter 里有没有忘了推。
+11. **`nextClassOccurrence` 的扫描窗口是 21 天**（`scanDays`，含今天）：法定假期可以连放 9 天以上，
+    窗口短了首页整个假期都会空白。找不到下一节课时若今天正在放假，要显示「今天放假」而不是留白。
 
 ## 发布
 
@@ -68,13 +79,15 @@ $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 
 | 文件 | 内容 |
 | --- | --- |
 | `README.md` | 功能、截图、使用指南、项目结构、已验证内容 |
-| `BUILD_NOTES.md` | **§9.1 ~ §9.18 每轮开发的踩坑与决策**，最值钱的一份 |
+| `BUILD_NOTES.md` | **§9.1 ~ §9.21 每轮开发的踩坑与决策**，最值钱的一份 |
 | `VIVO_ATOMIC_NOTIFICATION.md` | vivo 原子通知（COURSE 场景）接入细节 |
 | `AGENTS.md` | 就是本页：接手约定与红线 |
 
-仓库目录之外的东西（打包发给别人时不会带上）：`D:\DSH\dist\`（APK）、`D:\DSH\build_112.ps1`
-（analyze + test + 四包构建 + aapt2 校验）、`D:\DSH\github_release.ps1`（发 Release）、
-`D:\DSH\vivo_cloud_test_checklist.md`（vivo 商店上线自测清单）、`D:\DSH\release_notes_*.md`。
+仓库目录之外的东西（打包发给别人时不会带上）：`D:\DSH\dist\`（APK）、`D:\DSH\build_v114.ps1`
+（本轮用的 analyze + test + 四包构建 + aapt2 校验脚本；`build_*.ps1` 是过往各轮的同款脚本，
+**执行策略禁止直接运行未签名脚本**，用 `Invoke-Expression (Get-Content -Raw -Encoding UTF8 '<路径>')`）、
+`D:\DSH\github_release.ps1`（发 Release）、`D:\DSH\vivo_cloud_test_checklist.md`（vivo 商店上线自测清单）、
+`D:\DSH\release_notes_*.md`。
 
 ## 待办
 

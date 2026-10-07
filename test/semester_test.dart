@@ -292,6 +292,47 @@ void main() {
       expect(got.startsAt, DateTime(2026, 10, 10, 10, 20));
     });
 
+    test('连放 9 天假（春节那种）也能找到假期后的第一节课', () {
+      // 2026-10-07（周三）起连放 9 天到 10-15，10-16 周五正常上课。
+      final block = HolidayCalendar(
+        holidays: [
+          for (var d = 7; d <= 15; d++) HolidayDay(DateTime(2026, 10, d), '连假'),
+        ],
+      );
+      final courses = [
+        const Course(
+          name: '周五的课',
+          teacher: '张老师',
+          location: 'A101',
+          dayOfWeek: 5,
+          startSection: 1,
+          endSection: 2,
+          startWeek: 1,
+          endWeek: 20,
+        ),
+      ];
+
+      final got = find(holidays: block, courses: courses)!;
+      expect(got.course.name, '周五的课');
+      expect(got.startsAt, DateTime(2026, 10, 16, 8, 20));
+      expect(got.isToday, isFalse);
+
+      // 对照组：把窗口按旧值缩回 8 天，这段假期就整段盖住窗口、什么都找不到。
+      // 这正是默认值要放大到 3 周的原因。
+      expect(
+        nextClassOccurrence(
+          courses: courses,
+          holidays: block,
+          startDate: start,
+          totalWeeks: 20,
+          periods: defaultPeriods,
+          from: now,
+          scanDays: 8,
+        ),
+        isNull,
+      );
+    });
+
     test('学期结束后不再报课', () {
       expect(
         find(
