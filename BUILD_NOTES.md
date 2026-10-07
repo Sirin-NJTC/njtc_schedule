@@ -2777,6 +2777,53 @@ UTF-8 文本（临时 `test/_dump_fixture_test.dart` 写文件，用完即删）
 **教训**：清洗真实数据要分两类看 ——「个人信息」（课程 / 教师 / 班级 / 学号）必须无差别清掉，
 连注释和预览图都不放过；「公开信息」（教学楼名、作息时间）不必动，动了反而破坏图文一致性。
 
+---
+
+## 9.28 删库重建：让 GitHub 上的悬空对象真的消失（以及「整批推 tag 不触发 CI」）
+
+**起因**：§9.26 实测出「force push 之后，重写前的旧提交仍能按完整 SHA 取到」（真机截图、
+真实 `.xls` 都还取得到）。用户裁决**删库重建**，而不是联系 GitHub Support 清 GC。
+
+**做法（2026-10-07）**：
+1. **用户侧**：在 GitHub 网页删掉 `Sirin-NJTC/njtc_schedule`，再新建**同名空仓库**
+   （不勾 README / .gitignore，保持全空）。
+2. **核对真的是空仓库**：匿名 `GET /repos/.../commits?per_page=1` 返回 **409 Conflict**
+   （`Git Repository is empty`），不是 200。
+3. **推干净历史**：`git push origin main`（`* [new branch] main -> main`）+
+   `git push origin --tags`（5 个 `* [new tag]`）。历史本身在 §9.27 已经清洗好，这次推上去的
+   每一个提交都是干净的（没有真机截图、没有真实固件、没有真实课名）。
+4. **验收（匿名 API，全部通过）**：
+   * 最新提交 `2e86736`；`screenshots/` 恰好 10 张，体积与本地一致；
+   * `GET /commits/a96a89c` → **422**、`GET /contents/screenshots?ref=a96a89c` → **404**、
+     `GET /contents/test/fixtures/njtc_sample.xls?ref=a96a89c` → **404**
+     ⇒ **旧悬空对象随删库一起没了**（对比 §9.26 的 200 / 11 张 / 34816 字节）；
+   * `git/trees/main?recursive=1` 共 189 个文件，名字里没有 `*real_device*` 这类残留。
+
+**踩坑：新仓库上「一次性推全部 tag」不会触发 Release 工作流。**
+`git push origin --tags` 明明把 5 个 tag 都推上去了（`* [new tag]`），`tags` 列表也有这 5 个，
+工作流文件 `.github/workflows/release.yml` 在远端确实是 `state=active`、
+`on: push: tags: ['v*']` 也在，但 `actions/runs` **total=0**、`releases` **0**。
+**解法**：把 tag 删掉再**单独推一次**即可 ——
+```powershell
+git push origin :refs/tags/v1.3.0      # - [deleted] v1.3.0
+git push origin refs/tags/v1.3.0       # * [new tag] v1.3.0 → 立刻出现 run
+```
+随后 run `37592266703` 成功，Release `v1.3.0` 重新挂上四个 APK，**体积与删库前完全一致**
+（arm64-v8a 45,570,370 / armeabi-v7a 41,265,248 / universal 97,365,167 / x86_64 47,507,601 B）。
+结论：**给新仓库补历史时，tag 要逐条重推，别指望整批 `--tags` 一次点火**；
+「CI 没跑」先看 `actions/runs` 是不是 0，再删 tag 重推，比在 workflow 文件里找问题快得多。
+
+**代价与决定**：star / watch / issue / 旧 Release 与全部 CI 历史随删库消失。
+旧版本 Release（v1.1.12 ~ v1.2.0）**不补建**（用户裁决：只要 v1.3.0），tag 仍在，
+需要旧包时删 tag 重推即可按 §9.28 的办法重新出包。
+重写前的完整历史备份留在仓库目录之外：
+`D:\DSH\njtc_schedule_backup.bundle`（14,562,079 B，含真机截图那版旧历史，**用户决定先留着**，
+不要提交进仓库、也不要发给别人）。
+
+**教训**：想让数据从公开仓库彻底消失，只有「联系 GitHub Support 清 GC」和「删库重建」两条路；
+重建本身不难（推 main + 逐条推 tag 即可），但**代价是不可逆的**（社区数据全丢）——
+所以最省事的永远是**第一次就别提交上去**（红线 16）。
+
 
 
 

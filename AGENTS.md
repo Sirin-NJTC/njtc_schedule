@@ -4,10 +4,10 @@
 **310 个单元测试全绿**（22 个 `test/*_test.dart` + 7 个 `integration_test/*_e2e_test.dart`）。
 
 这一页只写「接手必须知道的约定与红线」，是 [`BUILD_NOTES.md`](BUILD_NOTES.md) 里 §9.x 各轮
-踩坑记录的浓缩版。**改代码前先扫一遍 §9.16 ~ §9.27**（显示开关、节假日联网更新、发布流程、
+踩坑记录的浓缩版。**改代码前先扫一遍 §9.16 ~ §9.28**（显示开关、节假日联网更新、发布流程、
 改日历漏推小组件那个回归、全览页 + 多格式导入 + 离线 OCR、节假日合并显示与时长调整、
-仓库截图/固件一律用模拟器与合成数据、重写历史也删不掉远端悬空对象、全仓库真实数据清洗），
-那里有每条约定是怎么被踩出来的。
+仓库截图/固件一律用模拟器与合成数据、重写历史也删不掉远端悬空对象、全仓库真实数据清洗、
+删库重建与「整批推 tag 不触发 CI」），那里有每条约定是怎么被踩出来的。
 
 ## 改完必须跑的验证
 
@@ -113,12 +113,18 @@ $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 
     （§9.26），但 GitHub 仍能按完整 SHA 取到悬空的旧对象（旧提交里的真机截图、真实 .xls 都还
     取得到）。真要彻底消失得联系 GitHub Support 清 GC 或删库重建 —— 所以第一条永远是
     **别把真实数据提交上去**。
+    ⚠️ 最终是**删库重建**解决的（§9.28，代价：star / watch / issue / 旧 Release / CI 历史全丢）：
+    重写后的历史推到一个同名新空仓库，旧悬空对象才真的变 404 / 422。**别再重复踩这一串坑**。
 
 ## 发布
 
 * 推一个 `v*` 标签 → `.github/workflows/release.yml` 会自动
   `analyze → test → build apk --release [--split-per-abi]` 并把四个包传成 Release 资产。
   **注意标签触发的工作流必须已经存在于被标签的那个提交里**（先提交工作流，再打标签）。
+* **给新仓库（或刚删库重建的仓库）补历史时，别指望 `git push --tags` 一次点火**：
+  2026-10-07 整批推 5 个 tag，远端 tag 都在、workflow 也是 `active`，但 `actions/runs` 是 0。
+  解法是**把 tag 删掉再单独推一次**：`git push origin :refs/tags/v1.3.0` +
+  `git push origin refs/tags/v1.3.0`（详见 §9.28）。**CI 没跑先数 run 数，再删 tag 重推**。
 * Release 资产名**必须 ASCII**（`njtc-schedule-<ver>-<abi>.apk`）：Windows PowerShell 会把
   URL `?name=` 里的中文整段丢掉（详见 §9.18）。本地 `D:\DSH\dist\内师课程表-*.apk` 保持中文名。
 * 手动重传 Release 用 `D:\DSH\github_release.ps1`（幂等；令牌放 `$env:GH_PAT`）。
@@ -128,7 +134,7 @@ $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 
 | 文件 | 内容 |
 | --- | --- |
 | `README.md` | 功能、截图、使用指南、项目结构、已验证内容 |
-| `BUILD_NOTES.md` | **§9.1 ~ §9.27 每轮开发的踩坑与决策**，最值钱的一份 |
+| `BUILD_NOTES.md` | **§9.1 ~ §9.28 每轮开发的踩坑与决策**，最值钱的一份 |
 | `VIVO_ATOMIC_NOTIFICATION.md` | vivo 原子通知（COURSE 场景）接入细节 |
 | `AGENTS.md` | 就是本页：接手约定与红线 |
 
