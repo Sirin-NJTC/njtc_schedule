@@ -2585,8 +2585,19 @@ v1.1.13 的 Release 里资产叫 `app-arm64-v8a-release.apk` 这种 Gradle 原�
 * `pubspec.yaml` `1.3.0+18`（versionCode 18 / 1018 / 2018 / 4018），
   `lib/pages/settings_page.dart` 关于页版本串与新增功能说明同步改掉。
 * 本地出包 `D:\DSH\build_v130.ps1`（照 `build_v120.ps1` 改，`$ver='1.3.0'`，
-  保留语言模型存在性检查 + aapt2 badging + sha256）。
-* 推 `v1.3.0` 标签触发 Release 工作流（标签必须打在工作流已存在的提交上）。
+  保留语言模型存在性检查 + aapt2 badging + sha256）。修 bug **之后**重打了一遍
+  （先出的那四个包是修复前的产物，sha256 已作废）：
+  universal 92.85MB `AA23128261E564615B223679E7FDE146E8D8648037E6AB3CB3711AB7B00957FD`、
+  armeabi-v7a 39.35MB `91EF4187E23C6E78C413F21E87EE8ABB4A27E51C23917F106FB90BEE8A34FE5A`、
+  arm64-v8a 43.46MB `67C913005CFE28E82F4A1D791416E3C4EB8557312DBD4EEE0C38667BE8FBA7A0`、
+  x86_64 45.31MB `7577D65CF58BAAD022B9FE87EE497A9986D68E9B1F5C4CE6C754BC6248241034`；
+  包内 `assets/tessdata/chi_sim.traineddata raw=12.47MB stored=12.47MB`（`noCompress` 仍生效）。
+* 推 `v1.3.0` 标签触发 Release 工作流（标签必须打在工作流已存在的提交上）：
+  run **37586399250** 一次全绿，Release「内师课程表 v1.3.0」四个 ASCII 资产 ——
+  arm64-v8a 45,570,370 B / armeabi-v7a 41,265,248 B / x86_64 47,507,601 B / universal 97,365,167 B。
+* 提交：`8843548`（10 文件 / +1577 −96）→ 推送 `78fe9c6..8843548` → tag `v1.3.0`；
+  随后 `6de38a1` 补真机截图与冒烟记录。源码包 `D:\DSH\njtc_schedule_source.zip` = 150 文件 / 12020.4 KB
+  （`make_zip.ps1` 的 excludePaths 仍排除 `android\app\src\main\assets\tessdata`）。
 
 
 
