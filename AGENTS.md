@@ -1,18 +1,19 @@
 # AGENTS.md — 接手这个项目前先读这页
 
-内江师范学院课程表（Android / Flutter）。当前版本 **1.2.0+17**（`pubspec.yaml`），
-**272 个单元测试全绿**（22 个 `test/*_test.dart` + 7 个 `integration_test/*_e2e_test.dart`）。
+内江师范学院课程表（Android / Flutter）。当前版本 **1.3.0+18**（`pubspec.yaml`），
+**310 个单元测试全绿**（22 个 `test/*_test.dart` + 7 个 `integration_test/*_e2e_test.dart`）。
 
 这一页只写「接手必须知道的约定与红线」，是 [`BUILD_NOTES.md`](BUILD_NOTES.md) 里 §9.x 各轮
-踩坑记录的浓缩版。**改代码前先扫一遍 §9.16 ~ §9.22**（显示开关、节假日联网更新、发布流程、
-改日历漏推小组件那个回归、全览页 + 多格式导入 + 离线 OCR），那里有每条约定是怎么被踩出来的。
+踩坑记录的浓缩版。**改代码前先扫一遍 §9.16 ~ §9.23**（显示开关、节假日联网更新、发布流程、
+改日历漏推小组件那个回归、全览页 + 多格式导入 + 离线 OCR、节假日合并显示与时长调整），
+那里有每条约定是怎么被踩出来的。
 
 ## 改完必须跑的验证
 
 ```powershell
 $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 flutter 3.47.6
 & $flutter analyze            # 必须 0 issue
-& $flutter test               # 必须 272 passed
+& $flutter test               # 必须 310 passed
 ```
 
 * 动了**提醒排程 / 桌面小组件 / 网页导入 / OCR** 这几块（Dart 与 Kotlin 都要改的那种），还要跑对应的
@@ -79,6 +80,17 @@ $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 
 14. **OCR 语言模型/引擎相关的东西一律在 `OcrService` + `OcrBridge` 里**，别把
     `PdfRenderer`、`TextPainter` 这类平台细节漏到页面层；识别结果先给用户过一眼再解析导入
     （OCR 出来的括号数字是会认花的，§9.22.5 有原文）。
+15. **节假日仍然是「逐天」存储的**：`HolidayCalendar.holidays` 一天一条（`yyyy-MM-dd|name`），
+    页面上的「一行」只是 `HolidayRange` 这个**显示层视图**（`holidayRanges` 按
+    `festivalKeyOf(name)` + epochDay 连续切段）。下发给 Kotlin 的契约因此没变，
+    **别顺手把存储改成区间**，否则老存档、原生 `holidays: Set<Long>` 全要跟着动。
+    改这段代码时记住四件事：写回只走 `withHolidayRange()`（它负责接管重叠段、删掉被压到的补班日、
+    按 `maxHolidayRangeDays = 120` 截断）；返回前一定 `.sorted()`（同一天只留先来的那条）；
+    保存路径必须经 `AppState.updateHolidays()`（红线 10 的小组件推送在里面）；
+    **一天被别人接管时要记原主**——`HolidayDay.originName` 会以行首 `^原主|日期|名字` 的
+    形式进存档，缩短 / 删除那一段时把它还给原来的节日（忘了归还就是「那天悄悄不是假期了」，
+    提醒会在放假日响）。**动这个存档格式一定要回头跑老格式的用例**：别用三段竖线编码，
+    老数据里名字本身可能带 `|`。
 
 ## 发布
 
@@ -94,12 +106,12 @@ $flutter = 'D:\DSH\.tools\flutter\bin\flutter.bat'   # 本机路径；CI 固定 
 | 文件 | 内容 |
 | --- | --- |
 | `README.md` | 功能、截图、使用指南、项目结构、已验证内容 |
-| `BUILD_NOTES.md` | **§9.1 ~ §9.22 每轮开发的踩坑与决策**，最值钱的一份 |
+| `BUILD_NOTES.md` | **§9.1 ~ §9.23 每轮开发的踩坑与决策**，最值钱的一份 |
 | `VIVO_ATOMIC_NOTIFICATION.md` | vivo 原子通知（COURSE 场景）接入细节 |
 | `AGENTS.md` | 就是本页：接手约定与红线 |
 
-仓库目录之外的东西（打包发给别人时不会带上）：`D:\DSH\dist\`（APK）、`D:\DSH\build_v120.ps1`
-（本轮用的 analyze + test + 四包构建 + aapt2 校验脚本；`build_*.ps1` 是过往各轮的同款脚本，
+仓库目录之外的东西（打包发给别人时不会带上）：`D:\DSH\dist\`（APK）、`D:\DSH\build_v130.ps1`
+（v1.3.0 那轮用的 analyze + test + 四包构建 + aapt2 校验脚本；`build_*.ps1` 是过往各轮的同款脚本，
 **执行策略禁止直接运行未签名脚本**，用 `Invoke-Expression (Get-Content -Raw -Encoding UTF8 '<路径>')`）、
 `D:\DSH\github_release.ps1`（发 Release）、`D:\DSH\vivo_cloud_test_checklist.md`（vivo 商店上线自测清单）、
 `D:\DSH\release_notes_*.md`。仓库里跟 OCR 有关的两个工具：`tool/fetch_tessdata.ps1`
