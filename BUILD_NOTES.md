@@ -2422,5 +2422,24 @@ v1.1.13 的 Release 里资产叫 `app-arm64-v8a-release.apk` 这种 Gradle 原�
   夹具只能跟着 APK 走（asset），共享目录里的东西活不过安装。
 * 复用比重写便宜：全览页能做到零像素回归，靠的是「网格只加参数、不改算式」。
 
+### 9.22.7 出包与 CI（v1.2.0）
+
+* 本地出包用新增的 `D:\DSH\build_v120.ps1`（照 `build_v114.ps1` 改），开头多了一步
+  **语言模型存在性检查**：仓库里没有 `assets/tessdata/*.traineddata`，
+  忘了跑 `tool/fetch_tessdata.ps1` 的话构建出来的包会在真机上 OCR 报错
+  （或者 `flutter build` 直接因为 pubspec 里声明的 asset 不存在而失败）。
+  体积（本地）：arm64 43.46 MB / v7a 39.31 MB / x86_64 45.31 MB / universal 92.81 MB。
+* **CI 也要在 analyze 之前下载语言模型**（`.github/workflows/release.yml` 新增一步）：
+  `chi_sim` 取 `tessdata_best`、`eng` 取 `tessdata_fast`，从 `raw.githubusercontent.com`
+  `curl -fL --retry 3` 拉；`.gitignore` 忽略 `android/app/src/main/assets/tessdata/`。
+* 推 `v1.2.0` 标签 → 工作流 `37583456946` **一次通过**（含「下载 OCR 语言模型」步骤），
+  Release `内师课程表 v1.2.0` 产出 4 个 ASCII 资产，名字与体积：
+  `njtc-schedule-1.2.0-arm64-v8a.apk` 45,570,226 B /
+  `-armeabi-v7a.apk` 41,232,332 B / `-x86_64.apk` 47,507,449 B /
+  `-universal.apk` 97,332,251 B（与本地包仅差几百字节，属重建差异）。
+* 源码 zip（`D:\DSH\make_zip.ps1`）这轮把 `android/app/src/main/assets/tessdata`
+  加进排除表 —— 否则 16 MB 语言模型会混进「源码」包里；重打后 147 文件 / 11183 KB，
+  关键条目全部 OK。
+
 
 
