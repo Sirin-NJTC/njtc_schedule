@@ -74,7 +74,7 @@ void main() {
       id: 'e2e-reminder',
       name: '端到端验证课表',
       semester: '2026-2027年第1学期',
-      major: '机器人工程',
+      major: '示例工程',
       totalWeeks: 20,
       // 起始日期取一周前 → 今天处于第 2 周，保证课程在第 1..20 周内生效
       startDate: now.subtract(const Duration(days: 7)),
@@ -83,27 +83,27 @@ void main() {
         Course(
           name: kCourseA,
           teacher: '测试教师',
-          location: '明德楼B216',
+          location: '格致楼216',
           dayOfWeek: dow,
           startSection: 1,
           endSection: 1,
           startWeek: 1,
           endWeek: 20,
           courseCode: 'ZB1040282-07',
-          className: '智26.8',
+          className: '演示26.8',
         ),
         // 与 A 连堂（同名/同地点/节次紧接）→ A 不应发「下节课预告」
         Course(
           name: kCourseA2,
           teacher: '测试教师',
-          location: '明德楼B216',
+          location: '格致楼216',
           dayOfWeek: dow,
           startSection: 2,
           endSection: 2,
           startWeek: 1,
           endWeek: 20,
           courseCode: 'ZB1040282-07',
-          className: '智26.8',
+          className: '演示26.8',
         ),
         // 第三节、不同课 → A2 应发「下节课预告」（预告 B）
         Course(
@@ -116,7 +116,7 @@ void main() {
           startWeek: 1,
           endWeek: 20,
           courseCode: 'ZB1040283-01',
-          className: '智26.8',
+          className: '演示26.8',
         ),
       ],
     );

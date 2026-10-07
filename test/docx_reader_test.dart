@@ -23,7 +23,7 @@ Uint8List _docx(String body) {
 
 /// 课表文档的正文：两行说明 + 一张「节次 × 星期」表。
 const String _body = '<w:p><w:r><w:t>2026-2027年第1学期</w:t></w:r></w:p>'
-    '<w:p><w:r><w:t>专业：机器人工程</w:t></w:r></w:p>'
+    '<w:p><w:r><w:t>专业：示例工程</w:t></w:r></w:p>'
     '<w:tbl>'
     '<w:tr>'
     '<w:tc><w:p><w:r><w:t>节次</w:t></w:r></w:p></w:tc>'
@@ -32,14 +32,14 @@ const String _body = '<w:p><w:r><w:t>2026-2027年第1学期</w:t></w:r></w:p>'
     '</w:tr>'
     '<w:tr>'
     '<w:tc><w:p><w:r><w:t>上午一</w:t></w:r></w:p></w:tc>'
-    '<w:tc><w:p><w:r><w:t>高等数学Ⅰ（上）/(3-4节)7-18周</w:t><w:tab/>'
-    '<w:t>明德楼A103</w:t><w:tab/><w:t>曾玉祥</w:t></w:r></w:p></w:tc>'
+    '<w:tc><w:p><w:r><w:t>示例课程戊/(3-4节)7-18周</w:t><w:tab/>'
+    '<w:t>明德楼A103</w:t><w:tab/><w:t>示例老师B</w:t></w:r></w:p></w:tc>'
     '<w:tc><w:p/></w:tc>'
     '</w:tr>'
     '<w:tr>'
     '<w:tc><w:p><w:r><w:t>下午三</w:t></w:r></w:p></w:tc>'
     '<w:tc><w:p/></w:tc>'
-    '<w:tc><w:p><w:r><w:t>Python程序设计/(5-6节)7-18周/ 格致楼205/徐双</w:t></w:r></w:p></w:tc>'
+    '<w:tc><w:p><w:r><w:t>示例课程己/(5-6节)7-18周/ 格致楼205/示例老师E</w:t></w:r></w:p></w:tc>'
     '</w:tr>'
     '</w:tbl>';
 
@@ -56,29 +56,29 @@ void main() {
     expect(text, isNotNull);
     final lines = text!.split('\n');
     expect(lines[0], '2026-2027年第1学期');
-    expect(lines[1], '专业：机器人工程');
+    expect(lines[1], '专业：示例工程');
     expect(lines[2].split('\t'), ['节次', '星期一', '星期二']);
     // 单元格里的 w:tab 也要变成制表符，否则课程名/地点/老师会粘成一坨
     expect(lines[3].split('\t').first, '上午一');
-    expect(lines[3], contains('高等数学Ⅰ（上）'));
+    expect(lines[3], contains('示例课程戊'));
     expect(lines[3], contains('明德楼A103'));
-    expect(lines[4], contains('Python程序设计'));
+    expect(lines[4], contains('示例课程己'));
   });
 
   test('抠出来的文字能直接解析成课程（docx → 课表 一条龙）', () {
     final tt = DocumentParser.parse(DocxReader.readText(_docx(_body))!,
         name: 'docx 导入');
     expect(tt.courses.length, 2);
-    final math = tt.courses.firstWhere((c) => c.name.contains('高等数学'));
+    final math = tt.courses.firstWhere((c) => c.name.contains('示例课程戊'));
     expect(math.dayOfWeek, 1);
     expect(math.startSection, 3);
     expect(math.endSection, 4);
     expect(math.location, '明德楼A103');
-    expect(math.teacher, '曾玉祥');
-    expect(tt.courses.any((c) => c.name.contains('Python') && c.dayOfWeek == 2),
+    expect(math.teacher, '示例老师B');
+    expect(tt.courses.any((c) => c.name.contains('示例课程己') && c.dayOfWeek == 2),
         isTrue);
     expect(tt.semester, '2026-2027年第1学期');
-    expect(tt.major, '机器人工程');
+    expect(tt.major, '示例工程');
     expect(tt.totalWeeks, 20);
   });
 

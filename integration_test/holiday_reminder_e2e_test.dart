@@ -40,14 +40,14 @@ Course _course({
     Course(
       name: name,
       teacher: '测试教师',
-      location: '明德楼B216',
+      location: '格致楼216',
       dayOfWeek: dayOfWeek,
       startSection: 1,
       endSection: 1,
       startWeek: startWeek,
       endWeek: endWeek,
       courseCode: 'ZB1040282-07',
-      className: '智26.8',
+      className: '演示26.8',
     );
 
 void main() {

@@ -69,7 +69,7 @@ void main() {
 
   test('recognizePdf：页数、截断标记都带回来', () async {
     mock((call) async => <Object?, Object?>{
-          'text': '星期一 大学英语',
+          'text': '星期一 示例课程子',
           'pages': 12,
           'recognizedPages': 8,
           'truncated': true,
@@ -77,7 +77,7 @@ void main() {
 
     final r = await OcrService.recognizePdf(Uint8List.fromList([1]));
 
-    expect(r.text, contains('大学英语'));
+    expect(r.text, contains('示例课程子'));
     expect(r.pages, 12);
     expect(r.recognizedPages, 8);
     expect(r.truncated, isTrue);

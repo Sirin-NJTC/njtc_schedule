@@ -15,7 +15,7 @@ class Timetable {
   /// 学期，如 "2026-2027年第1学期"
   String semester;
 
-  /// 专业，如 "机器人工程"
+  /// 专业，如 "示例工程"
   String major;
 
   /// 总周数

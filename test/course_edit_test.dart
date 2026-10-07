@@ -14,8 +14,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Course _math() => const Course(
-      name: '高等数学Ⅰ（上）',
-      teacher: '曾玉祥',
+      name: '示例课程戊',
+      teacher: '示例老师B',
       location: '明德楼A103',
       dayOfWeek: 1,
       startSection: 1,
@@ -119,7 +119,7 @@ void main() {
     final state = await _state();
     await _pumpHome(tester, state);
 
-    await tester.tap(inGrid('高等数学Ⅰ（上）').first);
+    await tester.tap(inGrid('示例课程戊').first);
     await tester.pumpAndSettle();
     expect(find.text('编辑'), findsOneWidget);
 
@@ -142,7 +142,7 @@ void main() {
     final state = await _state();
     await _pumpHome(tester, state);
 
-    await tester.tap(inGrid('高等数学Ⅰ（上）').first);
+    await tester.tap(inGrid('示例课程戊').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
@@ -152,7 +152,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(state.active!.courses, isEmpty);
-    expect(inGrid('高等数学Ⅰ（上）'), findsNothing);
+    expect(inGrid('示例课程戊'), findsNothing);
   });
 
   testWidgets('没有任何课表时「手动添加课程」会自动建一份课表', (tester) async {

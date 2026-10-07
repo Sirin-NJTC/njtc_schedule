@@ -67,7 +67,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="人工智能导论"
+                android:text="示例课程甲"
                 android:textColor="#111827"
                 android:textSize="13sp"
                 android:textStyle="bold" />
@@ -75,7 +75,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="明德楼B216"
+                android:text="格致楼216"
                 android:textColor="#6B7280"
                 android:textSize="10sp" />
         </LinearLayout>
@@ -110,7 +110,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="高等数学Ⅰ（上）"
+                android:text="示例课程戊"
                 android:textColor="#111827"
                 android:textSize="13sp"
                 android:textStyle="bold" />
@@ -153,7 +153,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="大学外语Ⅰ"
+                android:text="示例课程子"
                 android:textColor="#111827"
                 android:textSize="13sp"
                 android:textStyle="bold" />
@@ -161,7 +161,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="明德楼B309"
+                android:text="格致楼203"
                 android:textColor="#6B7280"
                 android:textSize="10sp" />
         </LinearLayout>

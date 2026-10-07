@@ -11,58 +11,58 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:njtc_schedule/models/course.dart';
 import 'package:njtc_schedule/services/timetable_parser.dart';
 
-/// 内江师范学院教务系统真实导出的课表（智26.8，2026-2027 学年第 1 学期）。
-/// 数据来源：`智26.8课表(20260831155948995).xls` 经 xlrd 读取后的原始单元格。
+/// 内江师范学院教务系统真实导出的课表（演示26.8，2026-2027 学年第 1 学期）。
+/// 数据来源：`演示26.8课表(20260831155948995).xls` 经 xlrd 读取后的原始单元格。
 const List<List<String>> realGrid = [
   [
     '2026-2027年第1学期', '2026-2027年第1学期', '2026-2027年第1学期',
-    '智26.8课表', '智26.8课表', '智26.8课表', '智26.8课表',
-    '专业：机器人工程', '专业：机器人工程',
+    '演示26.8课表', '演示26.8课表', '演示26.8课表', '演示26.8课表',
+    '专业：示例工程', '专业：示例工程',
   ],
   ['节次', '', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'],
   [
     '上午', '一',
-    '人工智能导论/(1-2节)7-18周/ 明德楼B216/韩云/(2026-2027-1)-ZB1040282-07/智26.8',
+    '示例课程甲/(1-2节)7-18周/ 格致楼216/示例老师A/(2026-2027-1)-ZB1040282-07/演示26.8',
     '',
-    '思想道德与法治/(1-2节)7-18周/ 明德楼B214/代维/(2026-2027-1)-GB0640014-10/智26.7;智26.8',
-    '大学生心理健康教育/(1-2节)6-18周/ 明德楼B301/彭玉发/(2026-2027-1)-GB1240005-29/智26.7;智26.8',
-    '形势与政策Ⅰ/(1-2节)7-10周/ 培训中心201/刘欢/(2026-2027-1)-GB0640008-22/智26.7;智26.8',
+    '示例课程乙/(1-2节)7-18周/ 格致楼214/示例老师D/(2026-2027-1)-GB0640014-10/演示26.7;演示26.8',
+    '示例课程丙/(1-2节)6-18周/ 格致楼301/示例老师F/(2026-2027-1)-GB1240005-29/演示26.7;演示26.8',
+    '示例课程丁/(1-2节)7-10周/ 培训中心201/示例老师G/(2026-2027-1)-GB0640008-22/演示26.7;演示26.8',
     '', '',
   ],
   [
     '上午', '二',
-    '高等数学Ⅰ（上）/(3-4节)7-18周/ 明德楼A103/曾玉祥/(2026-2027-1)-JC0247023-10/智26.8',
+    '示例课程戊/(3-4节)7-18周/ 明德楼A103/示例老师B/(2026-2027-1)-JC0247023-10/演示26.8',
     '',
-    '高等数学Ⅰ（上）/(3-4节)7-18周/ 明德楼B204/曾玉祥/(2026-2027-1)-JC0247023-10/智26.8',
-    'Python程序设计/(3-4节)6-18周/ 格致楼113/徐双/(2026-2027-1)-JC1040051-01/智26.8',
-    '大学物理V（上）/(3-4节)7-17周/ 明德楼B314/张熙程/(2026-2027-1)-JC0340059-08/智26.8',
+    '示例课程戊/(3-4节)7-18周/ 格致楼204/示例老师B/(2026-2027-1)-JC0247023-10/演示26.8',
+    '示例课程己/(3-4节)6-18周/ 格致楼113/示例老师E/(2026-2027-1)-JC1040051-01/演示26.8',
+    '示例课程庚/(3-4节)7-17周/ 格致楼314/示例老师C/(2026-2027-1)-JC0340059-08/演示26.8',
     '', '',
   ],
   [
     '下午', '三',
     '',
-    '思想道德与法治/(5-6节)7-17周(单)/ 明德楼B112/代维/(2026-2027-1)-GB0640014-10/智26.7;智26.8\r\n'
-        '大学生心理健康教育/(5-6节)8-12周(双)/ 明德楼A310/彭玉发/(2026-2027-1)-GB1240005-29/智26.7;智26.8',
-    'Python程序设计/(5-6节)7-18周/ 格致楼205/徐双/(2026-2027-1)-JC1040051-01/智26.8',
-    '大学体育Ⅰ/(5-6节)1-18周/ 田径场04/张明莲/(2026-2027-1)-GB0840001-25/智26.7;智26.8',
-    '职业规划与就业创业指导Ⅰ/(5-6节)7-10周/ 明德楼A415/张小梅/(2026-2027-1)-GB2040011-53/智26.8\r\n'
-        'Python程序设计/(5-6节)11-17周/ 格致楼109/徐双/(2026-2027-1)-JC1040051-01/智26.8',
+    '示例课程乙/(5-6节)7-17周(单)/ 格致楼112/示例老师D/(2026-2027-1)-GB0640014-10/演示26.7;演示26.8\r\n'
+        '示例课程丙/(5-6节)8-12周(双)/ 明德楼A310/示例老师F/(2026-2027-1)-GB1240005-29/演示26.7;演示26.8',
+    '示例课程己/(5-6节)7-18周/ 格致楼205/示例老师E/(2026-2027-1)-JC1040051-01/演示26.8',
+    '示例课程辛/(5-6节)1-18周/ 田径场04/示例老师H/(2026-2027-1)-GB0840001-25/演示26.7;演示26.8',
+    '示例课程壬/(5-6节)7-10周/ 明德楼A415/示例老师I/(2026-2027-1)-GB2040011-53/演示26.8\r\n'
+        '示例课程己/(5-6节)11-17周/ 格致楼109/示例老师E/(2026-2027-1)-JC1040051-01/演示26.8',
     '', '',
   ],
   [
     '下午', '四',
     '',
-    '人工智能导论/(7-8节)7-18周/ 明德楼B218/韩云/(2026-2027-1)-ZB1040282-07/智26.8',
+    '示例课程甲/(7-8节)7-18周/ 格致楼218/示例老师A/(2026-2027-1)-ZB1040282-07/演示26.8',
     '',
-    '国家安全教育/(7-8节)6-10周/ 明德楼B213/陈洪英/(2026-2027-1)-GB0640024-01/地26.2;美26.2;智26.8\r\n'
-        '大学物理V（上）/(7-8节)11-15周/ 明德楼B105/张熙程/(2026-2027-1)-JC0340059-08/智26.8\r\n'
-        '高等数学Ⅰ（上）/(7-8节)16-18周/ 明德楼B119/曾玉祥/(2026-2027-1)-JC0247023-10/智26.8',
-    '高等数学Ⅰ（上）/(7-8节)6-18周/ 明德楼A203/曾玉祥/(2026-2027-1)-JC0247023-10/智26.8',
+    '示例课程癸/(7-8节)6-10周/ 格致楼213/示例老师J/(2026-2027-1)-GB0640024-01/演示26.1;演示26.2;演示26.8\r\n'
+        '示例课程庚/(7-8节)11-15周/ 格致楼105/示例老师C/(2026-2027-1)-JC0340059-08/演示26.8\r\n'
+        '示例课程戊/(7-8节)16-18周/ 格致楼119/示例老师B/(2026-2027-1)-JC0247023-10/演示26.8',
+    '示例课程戊/(7-8节)6-18周/ 明德楼A203/示例老师B/(2026-2027-1)-JC0247023-10/演示26.8',
     '', '',
   ],
   [
     '晚上', '五',
-    '思想道德与法治/(9-10节)12-14周(双)/ 明德楼B303/代维/(2026-2027-1)-GB0640014-10/智26.7;智26.8',
+    '示例课程乙/(9-10节)12-14周(双)/ 格致楼303/示例老师D/(2026-2027-1)-GB0640014-10/演示26.7;演示26.8',
     '', '', '', '', '', '',
   ],
   [
@@ -83,27 +83,27 @@ void main() {
   group('TimetableParser.parseCell', () {
     test('解析单门课程的标准格式', () {
       final courses = TimetableParser.parseCell(
-        '人工智能导论/(1-2节)7-18周/ 明德楼B216/韩云/(2026-2027-1)-ZB1040282-07/智26.8',
+        '示例课程甲/(1-2节)7-18周/ 格致楼216/示例老师A/(2026-2027-1)-ZB1040282-07/演示26.8',
         dayOfWeek: 1,
         slotIndex: 0,
       );
       expect(courses.length, 1);
       final c = courses.first;
-      expect(c.name, '人工智能导论');
-      expect(c.teacher, '韩云');
-      expect(c.location, '明德楼B216');
+      expect(c.name, '示例课程甲');
+      expect(c.teacher, '示例老师A');
+      expect(c.location, '格致楼216');
       expect(c.startSection, 1);
       expect(c.endSection, 2);
       expect(c.startWeek, 7);
       expect(c.endWeek, 18);
       expect(c.oddEven, 0);
       expect(c.courseCode, 'ZB1040282-07');
-      expect(c.className, '智26.8');
+      expect(c.className, '演示26.8');
     });
 
     test('解析单双周课程', () {
       final courses = TimetableParser.parseCell(
-        '思想道德与法治/(5-6节)7-17周(单)/ 明德楼B112/代维/(2026-2027-1)-GB0640014-10/智26.7;智26.8',
+        '示例课程乙/(5-6节)7-17周(单)/ 格致楼112/示例老师D/(2026-2027-1)-GB0640014-10/演示26.7;演示26.8',
         dayOfWeek: 2,
         slotIndex: 2,
       );
@@ -118,7 +118,7 @@ void main() {
 
     test('双周课程', () {
       final courses = TimetableParser.parseCell(
-        '思想道德与法治/(9-10节)12-14周(双)/ 明德楼B303/代维/(2026-2027-1)-GB0640014-10/智26.7;智26.8',
+        '示例课程乙/(9-10节)12-14周(双)/ 格致楼303/示例老师D/(2026-2027-1)-GB0640014-10/演示26.7;演示26.8',
         dayOfWeek: 1,
         slotIndex: 4,
       );
@@ -144,7 +144,7 @@ void main() {
     test('回归：时间字段不在第 1 段时仍能正确解析', () {
       // 变体格式：课程名与时间同段
       final courses = TimetableParser.parseCell(
-        '高等数学(3-4节)5-16周/ 明德楼A103/曾玉祥/(2026-2027-1)-JC0247023-10/智26.8',
+        '高等数学(3-4节)5-16周/ 明德楼A103/示例老师B/(2026-2027-1)-JC0247023-10/演示26.8',
         dayOfWeek: 3,
       );
       final c = courses.first;
@@ -154,20 +154,20 @@ void main() {
       expect(c.startWeek, 5);
       expect(c.endWeek, 16);
       expect(c.location, '明德楼A103');
-      expect(c.teacher, '曾玉祥');
+      expect(c.teacher, '示例老师B');
     });
 
     test('回归：地点粘在课名里时要把地点拆出来（真机就是这种形态）', () {
       // 内江师范走反向代理后，正方页面没有 title 标注、也没有单独的地址列，
       // 一格里只有一行 `课名 地点 (节次)周次` —— 真机日志里表现为
-      // 「… 明德楼B309 @」（@ 后面是空的教师+空地点），用户看到的就是「没有教室」。
+      // 「… 格致楼309 @」（@ 后面是空的教师+空地点），用户看到的就是「没有教室」。
       final courses = TimetableParser.parseCell(
-        '大学生心理健康教育 明德楼B309 (1-2节)1-16周',
+        '示例课程丙 格致楼309 (1-2节)1-16周',
         dayOfWeek: 4,
       );
       final c = courses.first;
-      expect(c.name, '大学生心理健康教育');
-      expect(c.location, '明德楼B309');
+      expect(c.name, '示例课程丙');
+      expect(c.location, '格致楼309');
       expect(c.startSection, 1);
       expect(c.endSection, 2);
       expect(c.startWeek, 1);
@@ -176,17 +176,17 @@ void main() {
 
     test('回归：格内只有地点时不得把课程名拆空', () {
       final courses = TimetableParser.parseCell(
-        '明德楼B309 (1-2节)1-16周',
+        '格致楼309 (1-2节)1-16周',
         dayOfWeek: 4,
       );
-      expect(courses.first.name, '明德楼B309');
+      expect(courses.first.name, '格致楼309');
       expect(courses.first.location, isEmpty);
     });
 
     test('解析一个单元格内多门课（换行分隔）', () {
       final courses = TimetableParser.parseCell(
-        '思想道德与法治/(5-6节)7-17周(单)/ 明德楼B112/代维/(2026-2027-1)-GB0640014-10/智26.7;智26.8\n'
-            '大学生心理健康教育/(5-6节)8-12周(双)/ 明德楼A310/彭玉发/(2026-2027-1)-GB1240005-29/智26.7;智26.8',
+        '示例课程乙/(5-6节)7-17周(单)/ 格致楼112/示例老师D/(2026-2027-1)-GB0640014-10/演示26.7;演示26.8\n'
+            '示例课程丙/(5-6节)8-12周(双)/ 明德楼A310/示例老师F/(2026-2027-1)-GB1240005-29/演示26.7;演示26.8',
         dayOfWeek: 2,
         slotIndex: 2,
       );
@@ -206,13 +206,13 @@ void main() {
         slotIndex: 3,
       );
       expect(courses.length, 3);
-      expect(courses[0].name, '国家安全教育');
+      expect(courses[0].name, '示例课程癸');
       expect(courses[0].startWeek, 6);
       expect(courses[0].endWeek, 10);
-      expect(courses[1].name, '大学物理V（上）');
+      expect(courses[1].name, '示例课程庚');
       expect(courses[1].startWeek, 11);
       expect(courses[1].endWeek, 15);
-      expect(courses[2].name, '高等数学Ⅰ（上）');
+      expect(courses[2].name, '示例课程戊');
       expect(courses[2].startWeek, 16);
       expect(courses[2].endWeek, 18);
     });
@@ -223,7 +223,7 @@ void main() {
 
     test('表头信息', () {
       expect(tt.semester, '2026-2027年第1学期');
-      expect(tt.major, '机器人工程');
+      expect(tt.major, '示例工程');
     });
 
     test('课程总数与分布', () {
@@ -252,21 +252,21 @@ void main() {
     });
 
     test('周一课程', () {
-      final c = findCourse(tt.courses, 1, 1, '人工智能导论');
-      expect(c.location, '明德楼B216');
-      expect(c.teacher, '韩云');
+      final c = findCourse(tt.courses, 1, 1, '示例课程甲');
+      expect(c.location, '格致楼216');
+      expect(c.teacher, '示例老师A');
       expect(c.startWeek, 7);
       expect(c.endWeek, 18);
 
-      final c2 = findCourse(tt.courses, 1, 3, '高等数学');
+      final c2 = findCourse(tt.courses, 1, 3, '示例课程戊');
       expect(c2.location, '明德楼A103');
-      expect(c2.teacher, '曾玉祥');
+      expect(c2.teacher, '示例老师B');
 
-      final c3 = findCourse(tt.courses, 1, 9, '思想道德与法治');
+      final c3 = findCourse(tt.courses, 1, 9, '示例课程乙');
       expect(c3.oddEven, 2, reason: '周一晚 9-10 节为双周课');
       expect(c3.startWeek, 12);
       expect(c3.endWeek, 14);
-      expect(c3.location, '明德楼B303');
+      expect(c3.location, '格致楼303');
     });
 
     test('周二 5-6 节同格两门课（单双周互补）', () {
@@ -276,11 +276,11 @@ void main() {
       expect(list.length, 2);
       final single = list.firstWhere((c) => c.oddEven == 1);
       final double_ = list.firstWhere((c) => c.oddEven == 2);
-      expect(single.name, '思想道德与法治');
+      expect(single.name, '示例课程乙');
       expect(single.startWeek, 7);
       expect(single.endWeek, 17);
-      expect(single.location, '明德楼B112');
-      expect(double_.name, '大学生心理健康教育');
+      expect(single.location, '格致楼112');
+      expect(double_.name, '示例课程丙');
       expect(double_.startWeek, 8);
       expect(double_.endWeek, 12);
       expect(double_.location, '明德楼A310');
@@ -291,9 +291,9 @@ void main() {
           .where((c) => c.dayOfWeek == 4 && c.startSection == 7)
           .toList();
       expect(list.length, 3);
-      expect(list.map((c) => c.name), contains('国家安全教育'));
-      expect(list.map((c) => c.name), contains('大学物理V（上）'));
-      expect(list.map((c) => c.name), contains('高等数学Ⅰ（上）'));
+      expect(list.map((c) => c.name), contains('示例课程癸'));
+      expect(list.map((c) => c.name), contains('示例课程庚'));
+      expect(list.map((c) => c.name), contains('示例课程戊'));
     });
 
     test('周五 5-6 节两门课', () {
@@ -301,16 +301,16 @@ void main() {
           .where((c) => c.dayOfWeek == 5 && c.startSection == 5)
           .toList();
       expect(list.length, 2);
-      expect(list.map((c) => c.name), contains('职业规划与就业创业指导Ⅰ'));
-      expect(list.map((c) => c.name), contains('Python程序设计'));
+      expect(list.map((c) => c.name), contains('示例课程壬'));
+      expect(list.map((c) => c.name), contains('示例课程己'));
     });
 
     test('教学班组成保留（含分号分隔的多班）', () {
-      // 周二 5-6 节（单周）的思想道德与法治，教学班为「智26.7;智26.8」
-      final c = findCourse(tt.courses, 2, 5, '思想道德与法治');
-      expect(c.className, '智26.7;智26.8');
+      // 周二 5-6 节（单周）的示例课程乙，教学班为「演示26.7;演示26.8」
+      final c = findCourse(tt.courses, 2, 5, '示例课程乙');
+      expect(c.className, '演示26.7;演示26.8');
       expect(c.courseCode, 'GB0640014-10');
-      expect(c.teacher, '代维');
+      expect(c.teacher, '示例老师D');
       expect(c.oddEven, 1);
     });
   });
@@ -320,14 +320,14 @@ void main() {
       final tt = TimetableParser.parseGrid(realGrid);
       // 第 7 周：单周课与不区分单双周的课都应出现
       final week7 = tt.coursesOn(2, 7);
-      expect(week7.any((c) => c.name == '思想道德与法治'), true, reason: '7 是单周');
-      expect(week7.any((c) => c.name == '大学生心理健康教育'), false,
+      expect(week7.any((c) => c.name == '示例课程乙'), true, reason: '7 是单周');
+      expect(week7.any((c) => c.name == '示例课程丙'), false,
           reason: '该课 8-12 周双周，第 7 周不上');
 
       // 第 8 周：双周课出现，单周课不出现
       final week8 = tt.coursesOn(2, 8);
-      expect(week8.any((c) => c.name == '大学生心理健康教育'), true);
-      expect(week8.any((c) => c.name == '思想道德与法治'), false, reason: '8 是双周');
+      expect(week8.any((c) => c.name == '示例课程丙'), true);
+      expect(week8.any((c) => c.name == '示例课程乙'), false, reason: '8 是双周');
     });
   });
 
@@ -400,14 +400,14 @@ void main() {
       // 走反向代理后拿不到接口、也拿不到 title 标注时，只能整页文字兜底。
       // 这种行以前会把地点丢掉（location 恒为空串），真机就表现为「没有教室」。
       final tt = TimetableParser.parseFreeText(
-        '星期一 大学生心理健康教育 明德楼B309 (1-2节)1-16周\n'
-        '星期四 Python程序设计 格致楼113 5-6节 1-16周',
+        '星期一 示例课程丙 格致楼309 (1-2节)1-16周\n'
+        '星期四 示例课程己 格致楼113 5-6节 1-16周',
       );
       expect(tt.courses.length, 2);
 
       final first = tt.courses[0];
-      expect(first.name, '大学生心理健康教育');
-      expect(first.location, '明德楼B309');
+      expect(first.name, '示例课程丙');
+      expect(first.location, '格致楼309');
       expect(first.dayOfWeek, 1);
       expect(first.startSection, 1);
       expect(first.endSection, 2);
@@ -415,7 +415,7 @@ void main() {
       expect(first.endWeek, 16);
 
       final second = tt.courses[1];
-      expect(second.name, 'Python程序设计');
+      expect(second.name, '示例课程己');
       expect(second.location, '格致楼113');
       expect(second.dayOfWeek, 4);
       expect(second.startSection, 5);

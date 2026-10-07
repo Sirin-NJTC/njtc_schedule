@@ -36,17 +36,17 @@ const String _slashTextTableHtml = '''
 <table id="kbtable">
   <tr><th>节次</th><th>星期一</th><th>星期二</th></tr>
   <tr><td>1-2节</td>
-      <td>人工智能导论/(1-2节)7-18周/明德楼B216/韩云/ZB1040282-07/智26.8</td>
+      <td>示例课程甲/(1-2节)7-18周/格致楼216/示例老师A/ZB1040282-07/演示26.8</td>
       <td></td></tr>
   <tr><td>3-4节</td><td></td>
-      <td>高等数学Ⅰ（上）/(3-4节)1-16周/明德楼A101/李四/GB001-01/智26.8</td></tr>
+      <td>示例课程戊/(3-4节)1-16周/明德楼A101/李四/GB001-01/演示26.8</td></tr>
 </table>
 ''';
 
 /// 从浏览器直接复制表格时，`innerText` 出来的是制表符分隔的文本。
 const String _tabSeparatedText = '节次\t星期一\t星期二\n'
-    '1-2节\t人工智能导论/(1-2节)7-18周/明德楼B216/韩云\t\n'
-    '3-4节\t\t高等数学Ⅰ（上）/(3-4节)1-16周/明德楼A101/李四\n';
+    '1-2节\t示例课程甲/(1-2节)7-18周/格致楼216/示例老师A\t\n'
+    '3-4节\t\t示例课程戊/(3-4节)1-16周/明德楼A101/李四\n';
 
 Course _find(List<Course> courses, int day, int section, String name) =>
     courses.firstWhere(
@@ -68,7 +68,7 @@ void main() {
         reason: '应保留「星期」表头，parseGrid 靠它建立 列→星期 映射',
       );
       expect(
-        grid.any((row) => row.any((c) => c.contains('人工智能导论'))),
+        grid.any((row) => row.any((c) => c.contains('示例课程甲'))),
         isTrue,
       );
     });
@@ -85,7 +85,7 @@ void main() {
         _payload(
           tableHtml: _fixture(),
           title: '学生课表',
-          text: '2026-2027年第1学期 专业：机器人工程 本学期共20周 2026-08-31正式上课',
+          text: '2026-2027年第1学期 专业：示例工程 本学期共20周 2026-08-31正式上课',
         ),
         name: '网页导入',
       );
@@ -95,16 +95,16 @@ void main() {
       expect(tt.courses.length, 9);
       expect(tt.name, '网页导入');
       expect(tt.semester, '2026-2027年第1学期');
-      expect(tt.major, '机器人工程');
+      expect(tt.major, '示例工程');
       expect(tt.totalWeeks, 20);
       expect(tt.startDate, DateTime(2026, 8, 31));
     });
 
     test('课程字段完整（教师/地点/代码/周次/节次）', () {
       final result = JwxtService.parsePayload(_payload(tableHtml: _fixture()));
-      final c = _find(result.timetable!.courses, 1, 1, '人工智能导论');
-      expect(c.teacher, '韩云');
-      expect(c.location, '明德楼B216');
+      final c = _find(result.timetable!.courses, 1, 1, '示例课程甲');
+      expect(c.teacher, '示例老师A');
+      expect(c.location, '格致楼216');
       expect(c.courseCode, 'ZB1040282-07');
       expect(c.startWeek, 7);
       expect(c.endWeek, 18);
@@ -130,14 +130,14 @@ void main() {
       final courses = result.timetable!.courses;
       expect(courses.length, 2);
 
-      final ai = _find(courses, 1, 1, '人工智能导论');
-      expect(ai.location, '明德楼B216');
-      expect(ai.teacher, '韩云');
+      final ai = _find(courses, 1, 1, '示例课程甲');
+      expect(ai.location, '格致楼216');
+      expect(ai.teacher, '示例老师A');
       expect(ai.courseCode, 'ZB1040282-07');
       expect(ai.startWeek, 7);
       expect(ai.endWeek, 18);
 
-      final math = _find(courses, 2, 3, '高等数学Ⅰ（上）');
+      final math = _find(courses, 2, 3, '示例课程戊');
       expect(math.location, '明德楼A101');
       expect(math.startWeek, 1);
       expect(math.endWeek, 16);
@@ -150,8 +150,8 @@ void main() {
       expect(result.ok, isTrue, reason: result.message);
       final courses = result.timetable!.courses;
       expect(courses.length, 2);
-      expect(_find(courses, 1, 1, '人工智能导论').location, '明德楼B216');
-      expect(_find(courses, 2, 3, '高等数学Ⅰ（上）').teacher, '李四');
+      expect(_find(courses, 1, 1, '示例课程甲').location, '格致楼216');
+      expect(_find(courses, 2, 3, '示例课程戊').teacher, '李四');
     });
   });
 
@@ -188,9 +188,9 @@ void main() {
   group('JwxtService.parsePayload —— 正方 jwglxt JSON 接口', () {
     // 真实接口的一行（字段名来自正方 V9 `xskbcx_cxXskbcxIndex.html?doType=query`）
     Map<String, dynamic> row({
-      String kcmc = '人工智能导论',
-      String xm = '韩云',
-      String cdmc = '明德楼B216',
+      String kcmc = '示例课程甲',
+      String xm = '示例老师A',
+      String cdmc = '格致楼216',
       String xqj = '1',
       String jcs = '1-2',
       String zcd = '7-18周',
@@ -208,9 +208,9 @@ void main() {
       final courses = ZfHtmlParser.coursesFromJwglxtJson([row()]);
       expect(courses.length, 1);
       final c = courses.first;
-      expect(c.name, '人工智能导论');
-      expect(c.teacher, '韩云');
-      expect(c.location, '明德楼B216');
+      expect(c.name, '示例课程甲');
+      expect(c.teacher, '示例老师A');
+      expect(c.location, '格致楼216');
       expect(c.dayOfWeek, 1);
       expect(c.startSection, 1);
       expect(c.endSection, 2);
@@ -240,18 +240,18 @@ void main() {
     test('同义字段名（kcm/xq/xqj 之外的变体）也能认', () {
       final courses = ZfHtmlParser.coursesFromJwglxtJson([
         {
-          'kcm': '大学英语',
-          'jsxm': '李梅',
-          'jxcdmc': '明德楼B201',
+          'kcm': '示例课程子',
+          'jsxm': '示例老师K',
+          'jxcdmc': '格致楼201',
           'xq': '5',
           'sksj': '第7-8节',
           'skzc': '2-16周(双)',
         },
       ]);
       expect(courses.length, 1);
-      expect(courses.first.name, '大学英语');
-      expect(courses.first.teacher, '李梅');
-      expect(courses.first.location, '明德楼B201');
+      expect(courses.first.name, '示例课程子');
+      expect(courses.first.teacher, '示例老师K');
+      expect(courses.first.location, '格致楼201');
       expect(courses.first.dayOfWeek, 5);
       expect(courses.first.startSection, 7);
       expect(courses.first.endSection, 8);
@@ -273,11 +273,11 @@ void main() {
         'tableHtml': '',
         'jsonRows': [
           row(),
-          row(kcmc: '高等数学Ⅰ（上）', xm: '曾玉祥', cdmc: '明德楼A103', jcs: '3-4'),
+          row(kcmc: '示例课程戊', xm: '示例老师B', cdmc: '明德楼A103', jcs: '3-4'),
         ],
         'xnm': '2026',
         'xqm': '3',
-      }, name: '智26.8课表');
+      }, name: '演示26.8课表');
 
       expect(result.ok, isTrue, reason: result.message);
       expect(result.message, contains('教务接口'));

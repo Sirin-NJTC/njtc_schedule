@@ -3,10 +3,10 @@ library;
 
 /// 一门课程在某段时间内的一次具体安排。
 class Course {
-  /// 课程名称，如 "高等数学Ⅰ（上）"
+  /// 课程名称，如 "示例课程戊"
   final String name;
 
-  /// 上课教师，如 "曾玉祥"
+  /// 上课教师，如 "示例老师B"
   final String teacher;
 
   /// 上课地点，如 "明德楼A103"
@@ -33,7 +33,7 @@ class Course {
   /// 课程代码，如 "JC0247023-10"
   final String courseCode;
 
-  /// 教学班组成，如 "智26.7;智26.8"
+  /// 教学班组成，如 "演示26.7;演示26.8"
   final String className;
 
   const Course({

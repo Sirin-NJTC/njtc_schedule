@@ -33,12 +33,12 @@ void main() {
         id: 'tt-1',
         name: '我的课表',
         semester: '2026-2027年第1学期',
-        major: '机器人工程',
+        major: '示例工程',
         totalWeeks: 20,
         startDate: DateTime(2026, 8, 31),
         courses: [
           const Course(
-            name: '高等数学Ⅰ（上）',
+            name: '示例课程戊',
             teacher: '张老师',
             location: '明德楼A103',
             dayOfWeek: 1,

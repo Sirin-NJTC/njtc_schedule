@@ -204,9 +204,9 @@ class ReminderBridge(
             when {
                 sessionPreview -> ReminderContent(
                     title = "还有 30 分钟上课 · 上午共 3 门课",
-                    content = "08:00 人工智能导论 @明德楼B216\n" +
-                        "10:00 高等数学Ⅰ（上） @明德楼A103\n" +
-                        "10:55 大学英语Ⅰ @明德楼B105",
+                    content = "08:00 示例课程甲 @格致楼216\n" +
+                        "10:00 示例课程戊 @明德楼A103\n" +
+                        "10:55 示例课程子Ⅰ @格致楼105",
                     subText = "记得带齐上午要用的全部教材",
                     capsuleText = "上午 3 门课",
                     islandLeftText = "上午 3 门课",
@@ -217,11 +217,11 @@ class ReminderBridge(
                 )
 
                 isEnd -> ReminderContent(
-                    title = "「高等数学Ⅰ（上）」10:45 下课",
-                    content = "下节课：大学物理V（上） · 10:55 · 明德楼B105",
+                    title = "「示例课程戊」10:45 下课",
+                    content = "下节课：示例课程庚 · 10:55 · 格致楼105",
                     subText = "下节课预告 · 第5-6节",
                     capsuleText = "大学物理… 10:55",
-                    islandLeftText = "大学物理V（上）",
+                    islandLeftText = "示例课程庚",
                     islandRightText = "10:55 上课",
                     isEnd = true,
                     accentColor = accent,
@@ -229,11 +229,11 @@ class ReminderBridge(
                 )
 
                 else -> ReminderContent(
-                    title = "第3-4节 · 高等数学Ⅰ（上）",
-                    content = "10:00 上课 · 明德楼A103 · 曾玉祥",
+                    title = "第3-4节 · 示例课程戊",
+                    content = "10:00 上课 · 明德楼A103 · 示例老师B",
                     subText = "还有 15 分钟",
                     capsuleText = "15 分钟后 高等数学…",
-                    islandLeftText = "高等数学Ⅰ（上）",
+                    islandLeftText = "示例课程戊",
                     islandRightText = "还有 15 分钟",
                     isEnd = false,
                     accentColor = accent,

@@ -3,7 +3,7 @@
 /// 用**合成的 .xls 固件**（`test/fixtures/sample_timetable.xls`）作为样例：
 /// 它的结构、字段顺序、合并单元格读出来的样子都和真实教务系统导出的
 /// .xls（OLE2 / BIFF8）一致，但课程 / 教师 / 教室全是虚构的
-/// （`示例课程甲` / `示例老师A` / `示例楼B201`），可以放心放在公开仓库里。
+/// （`示例课程甲` / `示例老师A` / `格致楼201`），可以放心放在公开仓库里。
 /// 固件由 `tool/make_xls_fixture.py` 生成（依赖 `xlwt`）。
 ///
 /// 说明：`excel` 包只支持 .xlsx（zip + XML），读不了教务系统这种老式
@@ -72,7 +72,7 @@ void main() {
       final cell = grid[2][2];
       expect(cell.contains('示例课程甲'), true);
       expect(cell.contains('(1-2节)7-18周'), true);
-      expect(cell.contains('示例楼B201'), true);
+      expect(cell.contains('格致楼201'), true);
       expect(cell.contains('AA0000001-01'), true);
 
       // 一格多课：单元格内用 \r\n 分隔

@@ -27,7 +27,7 @@ OUT = ROOT / "test" / "fixtures"
 # 课表里两门课的写法（一行一门，OCR 后正好能走 parseFreeText）
 LINES = [
     "星期一 高等数学 明德楼A103 (3-4节)7-18周",
-    "星期二 Python程序设计 格致楼205 (5-6节)7-18周",
+    "星期二 示例课程己 格致楼205 (5-6节)7-18周",
 ]
 
 FONT_CANDIDATES = [

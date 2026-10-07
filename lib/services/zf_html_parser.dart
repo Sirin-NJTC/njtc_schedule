@@ -8,12 +8,12 @@
 ///   并靠子元素的 `title` 属性标注字段名，同一格多门课用 `<hr>` 分隔：
 ///   ```html
 ///   <td rowspan="2">
-///     <div class="kbcontent">人工智能导论<br>
-///       <font title="教师">韩云</font><br>
+///     <div class="kbcontent">示例课程甲<br>
+///       <font title="教师">示例老师A</font><br>
 ///       <font title="周次(节次)">7-18周(1-2节)</font><br>
-///       <font title="地点">明德楼B216</font><br>
+///       <font title="地点">格致楼216</font><br>
 ///       <font title="教学班">(2026-2027-1)-ZB1040282-07</font><br>
-///       <font title="教学班组成">智26.8</font>
+///       <font title="教学班组成">演示26.8</font>
 ///     </div>
 ///   </td>
 ///   ```
@@ -274,8 +274,8 @@ class ZfHtmlParser {
     }
 
     var major = '';
-    // 网页上多数是「专业：机器人工程」，但有些页面把「专业」和值放在相邻单元格里，
-    // 经 `_plainText` 拼成「专业 机器人工程」，所以冒号是可选的；
+    // 网页上多数是「专业：示例工程」，但有些页面把「专业」和值放在相邻单元格里，
+    // 经 `_plainText` 拼成「专业 示例工程」，所以冒号是可选的；
     // 若「专业」后面跟的其实是别的标签（如「课程表」），则不算专业名。
     final mj = RegExp(r'专业\s*[：:]?\s*([^\s，,。;；、/]+)').firstMatch(text);
     if (mj != null) {

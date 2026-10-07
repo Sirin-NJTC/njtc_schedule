@@ -56,9 +56,9 @@ void main() {
       startDate: monday,
       courses: [
         Course(
-          name: '人工智能导论',
-          teacher: '韩云',
-          location: '明德楼B216',
+          name: '示例课程甲',
+          teacher: '示例老师A',
+          location: '格致楼216',
           dayOfWeek: dow,
           startSection: 1,
           endSection: 2,
@@ -66,8 +66,8 @@ void main() {
           endWeek: 20,
         ),
         Course(
-          name: '高等数学Ⅰ（上）',
-          teacher: '曾玉祥',
+          name: '示例课程戊',
+          teacher: '示例老师B',
           location: '明德楼A203',
           dayOfWeek: dow,
           startSection: 3,
@@ -98,9 +98,9 @@ void main() {
     expect(probe['emptyVisible'], isFalse, reason: '今天有课，不该显示「今天没课」');
     final rows = (probe['rows'] as List).cast<String>();
     expect(rows.length, 2, reason: '只该画出今天的两门课，实际：$rows');
-    expect(rows[0], contains('人工智能导论'));
-    expect(rows[0], contains('明德楼B216'));
-    expect(rows[1], contains('高等数学Ⅰ（上）'));
+    expect(rows[0], contains('示例课程甲'));
+    expect(rows[0], contains('格致楼216'));
+    expect(rows[1], contains('示例课程戊'));
     expect(probe['footer'], contains('2 门'), reason: '页脚该说共 2 门，实际：${probe['footer']}');
   });
 
@@ -118,8 +118,8 @@ void main() {
       courses: [
         Course(
           name: '放假那天本来有课',
-          teacher: '韩云',
-          location: '明德楼B216',
+          teacher: '示例老师A',
+          location: '格致楼216',
           dayOfWeek: now.weekday,
           startSection: 1,
           endSection: 2,
@@ -158,7 +158,7 @@ void main() {
       courses: [
         Course(
           name: '被补出来的课',
-          teacher: '曾玉祥',
+          teacher: '示例老师B',
           location: '明德楼A203',
           dayOfWeek: target,
           startSection: 3,

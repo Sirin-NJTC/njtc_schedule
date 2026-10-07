@@ -43,7 +43,7 @@ class TimetableParser {
   /// 课程代码，如 `ZB1040282-07` / `GB0640014-10`。
   static final RegExp _reCode = RegExp(r'([A-Z]{1,4}\d{6,8}-\d{1,2})');
 
-  /// 课名尾部粘连的地点，如 `明德楼B309` / `第五教学楼A101` / `田径场04`。
+  /// 课名尾部粘连的地点，如 `格致楼309` / `第五教学楼A101` / `田径场04`。
   /// 只用于「没有单独地址列」时的兜底拆分（见 [parseCell] 第 6.1 步）。
   static final RegExp _reTrailingPlace = RegExp(
     r'[\u4e00-\u9fa5]{1,8}(?:楼|馆|场|区|苑|中心)\s*[A-Za-z]?\d{1,4}(?:[-—－]\d{1,4})?(?:室|教室)?$',
@@ -57,7 +57,7 @@ class TimetableParser {
   /// 解析一个单元格的内容，返回该格内的课程列表。
   ///
   /// 例如：
-  /// `人工智能导论/(1-2节)7-18周/ 明德楼B216/韩云/(2026-2027-1)-ZB1040282-07/智26.8`
+  /// `示例课程甲/(1-2节)7-18周/ 格致楼216/示例老师A/(2026-2027-1)-ZB1040282-07/演示26.8`
   /// 同一格可含多门课，用换行分隔。
   static List<Course> parseCell(
     String text, {
@@ -172,14 +172,14 @@ class TimetableParser {
 
     // 6.1 兜底：有些页面把「课名 地点」挤在同一行（没有单独的地址列），
     // 于是地点被并进了课名 —— 从课名尾部把 `XX楼B309` 这类地点拆出来。
-    // 真机上就是这样：提醒里出现「… 明德楼B309 @」，地点字段其实是空的。
+    // 真机上就是这样：提醒里出现「… 格致楼309 @」，地点字段其实是空的。
     var name = courseName;
     if (location.isEmpty) {
       final placeMatch = _reTrailingPlace.firstMatch(name);
       if (placeMatch != null) {
         final candidate = placeMatch.group(0)!.trim();
         final head = name.substring(0, placeMatch.start).trim();
-        // 只有拆完还剩课名时才认，避免把「明德楼B309」本身当成课程
+        // 只有拆完还剩课名时才认，避免把「格致楼309」本身当成课程
         if (head.isNotEmpty) {
           name = head;
           location = candidate;

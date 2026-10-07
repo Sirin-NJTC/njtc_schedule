@@ -101,21 +101,21 @@ Future<void> _expectInterfaceImport(String url) async {
   expect(tt.semester, '2026-2027年第1学期'); // xnm=2026 + xqm=3
   expect(tt.totalWeeks, 18); // 页面没写「共 N 周」，用 max(zcd) 反推
 
-  final ai = tt.courses.firstWhere((c) => c.name.contains('人工智能导论'));
-  expect(ai.teacher, '韩云');
-  expect(ai.location, '明德楼B216');
+  final ai = tt.courses.firstWhere((c) => c.name.contains('示例课程甲'));
+  expect(ai.teacher, '示例老师A');
+  expect(ai.location, '格致楼216');
   expect(ai.dayOfWeek, 1);
   expect(ai.startSection, 1);
   expect(ai.endSection, 2);
   expect(ai.startWeek, 7);
   expect(ai.endWeek, 18);
 
-  final physics = tt.courses.firstWhere((c) => c.name.contains('大学物理'));
+  final physics = tt.courses.firstWhere((c) => c.name.contains('示例课程庚'));
   expect(physics.oddEven, 1);
   expect(physics.dayOfWeek, 4);
 
   final ethics =
-      tt.courses.where((c) => c.name.contains('思想道德与法治')).toList();
+      tt.courses.where((c) => c.name.contains('示例课程乙')).toList();
   expect(ethics.map((c) => '${c.startWeek}-${c.endWeek}').toList(),
       ['1-1', '3-3', '5-9']);
 }

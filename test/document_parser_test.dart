@@ -27,20 +27,20 @@ Uint8List _utf16(String s, {required bool littleEndian}) {
 void main() {
   group('DocumentParser.decodeText（编码猜测）', () {
     test('纯 UTF-8 原样解出', () {
-      expect(DocumentParser.decodeText(_u(utf8.encode('高等数学Ⅰ（上）'))),
-          '高等数学Ⅰ（上）');
+      expect(DocumentParser.decodeText(_u(utf8.encode('示例课程戊'))),
+          '示例课程戊');
     });
 
     test('UTF-8 BOM 不留在正文里', () {
-      final bytes = _u([0xEF, 0xBB, 0xBF, ...utf8.encode('大学英语')]);
-      expect(DocumentParser.decodeText(bytes), '大学英语');
+      final bytes = _u([0xEF, 0xBB, 0xBF, ...utf8.encode('示例课程子')]);
+      expect(DocumentParser.decodeText(bytes), '示例课程子');
     });
 
     test('UTF-16LE / UTF-16BE（带 BOM）都能解', () {
-      final le = _u([0xFF, 0xFE, ..._utf16('思想道德与法治', littleEndian: true)]);
-      final be = _u([0xFE, 0xFF, ..._utf16('思想道德与法治', littleEndian: false)]);
-      expect(DocumentParser.decodeText(le), '思想道德与法治');
-      expect(DocumentParser.decodeText(be), '思想道德与法治');
+      final le = _u([0xFF, 0xFE, ..._utf16('示例课程乙', littleEndian: true)]);
+      final be = _u([0xFE, 0xFF, ..._utf16('示例课程乙', littleEndian: false)]);
+      expect(DocumentParser.decodeText(le), '示例课程乙');
+      expect(DocumentParser.decodeText(be), '示例课程乙');
     });
 
     test('GBK 文本（不是合法 UTF-8）用 GBK 兜住，不是满屏乱码', () {
@@ -55,7 +55,7 @@ void main() {
 
   group('DocumentParser.normalize（清噪声）', () {
     test('全角空格与竖线表格线都变成分隔符', () {
-      final out = DocumentParser.normalize('上午　一│高等数学Ⅰ（上）');
+      final out = DocumentParser.normalize('上午　一│示例课程戊');
       expect(out, contains('上午'));
       expect(out, contains('\t'), reason: '竖线要变成制表符');
       expect(out, isNot(contains('　')), reason: '全角空格不该留着');
@@ -63,40 +63,40 @@ void main() {
     });
 
     test('页码行与空行丢掉，正文字数不变', () {
-      final out = DocumentParser.normalize('星期一 高等数学\n\n第 2 页\n3/5\n星期二 大学英语');
-      expect(out.split('\n'), ['星期一 高等数学', '星期二 大学英语']);
+      final out = DocumentParser.normalize('星期一 高等数学\n\n第 2 页\n3/5\n星期二 示例课程子');
+      expect(out.split('\n'), ['星期一 高等数学', '星期二 示例课程子']);
     });
   });
 
   group('DocumentParser.parse（文字 → 课程）', () {
     // 教务系统导出的「表格形」文字：制表符分列 + 星期表头 + 页脚学期信息。
-    const table = '2026-2027年第1学期\t\t智26.8课表\t专业：机器人工程\n'
+    const table = '2026-2027年第1学期\t\t演示26.8课表\t专业：示例工程\n'
         '节次\t\t星期一\t星期二\n'
-        '上午\t一\t高等数学Ⅰ（上）/(3-4节)7-18周/ 明德楼A103/曾玉祥/x\t\n'
-        '下午\t三\t\tPython程序设计/(5-6节)7-18周/ 格致楼205/徐双/x\n'
+        '上午\t一\t示例课程戊/(3-4节)7-18周/ 明德楼A103/示例老师B/x\t\n'
+        '下午\t三\t\t示例课程己/(5-6节)7-18周/ 格致楼205/示例老师E/x\n'
         '注--内容顺序为：课程<>周次<>地点<>教师   本学期2026-08-31正式上课至2027-01-17结束，共20周';
 
     test('表格形文字走 parseGrid：课程、地点、周次、学期都对', () {
       final tt = DocumentParser.parse(table, name: 'OCR 结果');
       expect(tt.courses.length, 2);
 
-      final math = tt.courses.firstWhere((c) => c.name.contains('高等数学'));
+      final math = tt.courses.firstWhere((c) => c.name.contains('示例课程戊'));
       expect(math.dayOfWeek, 1);
       expect(math.startSection, 3);
       expect(math.endSection, 4);
       expect(math.startWeek, 7);
       expect(math.endWeek, 18);
       expect(math.location, '明德楼A103');
-      expect(math.teacher, '曾玉祥');
+      expect(math.teacher, '示例老师B');
 
-      final py = tt.courses.firstWhere((c) => c.name.contains('Python'));
+      final py = tt.courses.firstWhere((c) => c.name.contains('示例课程己'));
       expect(py.dayOfWeek, 2);
       expect(py.startSection, 5);
       expect(py.location, '格致楼205');
 
       // 页脚的「本学期…正式上课」与「共20周」也要跟着走
       expect(tt.semester, '2026-2027年第1学期');
-      expect(tt.major, '机器人工程');
+      expect(tt.major, '示例工程');
       expect(tt.startDate, DateTime(2026, 8, 31));
       expect(tt.totalWeeks, 20);
       expect(tt.name, 'OCR 结果');
@@ -104,12 +104,12 @@ void main() {
 
     test('逐行文字走 parseFreeText（表格判据不够时）', () {
       final tt = DocumentParser.parse(
-        '星期一 大学生心理健康教育 明德楼B309 (1-2节)1-16周\n'
-        '星期四 Python程序设计 格致楼113 5-6节 1-16周',
+        '星期一 示例课程丙 格致楼309 (1-2节)1-16周\n'
+        '星期四 示例课程己 格致楼113 5-6节 1-16周',
       );
       expect(tt.courses.length, 2);
       expect(tt.courses[0].dayOfWeek, 1);
-      expect(tt.courses[0].location, '明德楼B309');
+      expect(tt.courses[0].location, '格致楼309');
       expect(tt.courses[1].dayOfWeek, 4);
       expect(tt.courses[1].startSection, 5);
     });
@@ -122,7 +122,7 @@ void main() {
 
     test('asGrid 判据：没表头又不够宽的时候不要瞎切', () {
       expect(DocumentParser.asGrid('星期一 高等数学'), isNull);
-      expect(DocumentParser.asGrid('星期一 高等数学\n星期二 大学英语'), isNull,
+      expect(DocumentParser.asGrid('星期一 高等数学\n星期二 示例课程子'), isNull,
           reason: '只有 2 行，凑不出表格');
       expect(DocumentParser.asGrid(table), isNotNull);
     });

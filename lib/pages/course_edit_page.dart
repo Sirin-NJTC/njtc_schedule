@@ -199,7 +199,7 @@ class _CourseEditPageState extends State<CourseEditPage> {
               textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
                 labelText: '课程名称 *',
-                hintText: '如 高等数学Ⅰ（上）',
+                hintText: '如 示例课程戊',
               ),
             ),
             const SizedBox(height: 12),
@@ -211,7 +211,7 @@ class _CourseEditPageState extends State<CourseEditPage> {
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       labelText: '教师',
-                      hintText: '如 曾玉祥',
+                      hintText: '如 示例老师B',
                     ),
                   ),
                 ),

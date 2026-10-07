@@ -65,9 +65,9 @@ void main() {
     // 页面上没有「共 N 周」，用 max(zcd)=18 反推
     expect(tt.totalWeeks, 18);
 
-    final ai = tt.courses.firstWhere((c) => c.name.contains('人工智能导论'));
-    expect(ai.teacher, '韩云');
-    expect(ai.location, '明德楼B216');
+    final ai = tt.courses.firstWhere((c) => c.name.contains('示例课程甲'));
+    expect(ai.teacher, '示例老师A');
+    expect(ai.location, '格致楼216');
     expect(ai.dayOfWeek, 1);
     expect(ai.startSection, 1);
     expect(ai.endSection, 2);
@@ -75,13 +75,13 @@ void main() {
     expect(ai.endWeek, 18);
 
     // 单双周
-    final physics = tt.courses.firstWhere((c) => c.name.contains('大学物理'));
+    final physics = tt.courses.firstWhere((c) => c.name.contains('示例课程庚'));
     expect(physics.oddEven, 1);
     expect(physics.dayOfWeek, 4);
 
     // 离散周次 1,3,5-9 必须逐段保留，不能补空隙
     final ethics =
-        tt.courses.where((c) => c.name.contains('思想道德与法治')).toList();
+        tt.courses.where((c) => c.name.contains('示例课程乙')).toList();
     expect(ethics.length, 3);
     expect(
       ethics.map((c) => '${c.startWeek}-${c.endWeek}').toList(),

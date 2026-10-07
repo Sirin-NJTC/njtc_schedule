@@ -84,26 +84,26 @@ void main() {
       final tt = result.timetable!;
       expect(tt.courses.length, 9);
       // 自动命名会带上抓到的学期/专业
-      expect(tt.name, '2026-2027年第1学期 机器人工程 课表');
+      expect(tt.name, '2026-2027年第1学期 示例工程 课表');
     });
 
     test('学期 / 专业 / 总周数 从「正文」兜住（课表表格外的那截也带回来了）', () {
       final tt = JwxtService.parsePayload(_payload()).timetable!;
       // 注意：载荷里的 tableHtml 只有 #kbtable（2921 字节），
-      // 「2026-2027学年第1学期 / 专业：机器人工程 / 共20周」在表格**外面**的 #head 里，
+      // 「2026-2027学年第1学期 / 专业：示例工程 / 共20周」在表格**外面**的 #head 里，
       // 靠的是 payload['text']（整页正文）而不是 tableHtml。这两半缺一不可。
       expect(tt.semester, '2026-2027年第1学期');
-      expect(tt.major, '机器人工程');
+      expect(tt.major, '示例工程');
       expect(tt.totalWeeks, 20);
     });
 
     test('教师 / 教室 / 课号 / 周次 / 节次 全都没丢', () {
       final tt = JwxtService.parsePayload(_payload()).timetable!;
-      final ai = _find(tt.courses, 1, 1, '人工智能导论');
-      expect(ai.teacher, '韩云');
-      expect(ai.location, '明德楼B216');
+      final ai = _find(tt.courses, 1, 1, '示例课程甲');
+      expect(ai.teacher, '示例老师A');
+      expect(ai.location, '格致楼216');
       expect(ai.courseCode, 'ZB1040282-07');
-      expect(ai.className, '智26.8');
+      expect(ai.className, '演示26.8');
       expect(ai.startWeek, 7);
       expect(ai.endWeek, 18);
       expect(ai.endSection, 2);
@@ -113,13 +113,13 @@ void main() {
     test('单双周这类语义在整条链路上没被磨掉', () {
       final tt = JwxtService.parsePayload(_payload()).timetable!;
       // 同一格（周二 5-6 节）里一门单周、一门双周，必须各自带住自己的 oddEven
-      final dan = _find(tt.courses, 2, 5, '思想道德与法治');
+      final dan = _find(tt.courses, 2, 5, '示例课程乙');
       expect(dan.oddEven, 1, reason: '单周');
       expect(dan.startWeek, 7);
       expect(dan.endWeek, 17);
-      expect(dan.teacher, '代维');
-      expect(dan.location, '明德楼B112');
-      final shuang = _find(tt.courses, 2, 5, '大学生心理健康教育');
+      expect(dan.teacher, '示例老师D');
+      expect(dan.location, '格致楼112');
+      final shuang = _find(tt.courses, 2, 5, '示例课程丙');
       expect(shuang.oddEven, 2, reason: '双周');
       expect(shuang.startWeek, 8);
       expect(shuang.endWeek, 12);

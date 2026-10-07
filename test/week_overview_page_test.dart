@@ -24,9 +24,9 @@ DateTime get _today {
 /// 让「今天」正好落在第 2 周。
 DateTime get _startOfWeek2 => _today.subtract(const Duration(days: 7));
 
-Course _course({String name = '高等数学Ⅰ（上）', int day = 1}) => Course(
+Course _course({String name = '示例课程戊', int day = 1}) => Course(
       name: name,
-      teacher: '曾玉祥',
+      teacher: '示例老师B',
       location: '明德楼A103',
       dayOfWeek: day,
       startSection: 3,
@@ -43,7 +43,7 @@ Future<AppState> _state({List<Course>? courses, int totalWeeks = 20}) async {
     id: 't1',
     name: '测试课表',
     semester: '2026-2027年第1学期',
-    major: '机器人工程',
+    major: '示例工程',
     totalWeeks: totalWeeks,
     startDate: _startOfWeek2,
     courses: courses ?? [_course()],

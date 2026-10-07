@@ -56,16 +56,16 @@ void main() {
     expect(tt, isNotNull, reason: '抓到课表页后必须能解析出课表');
     expect(result.pageUrl, contains('zf_xskb_list.html'));
     expect(result.pageTitle, isNotEmpty);
-    expect(result.rawText, contains('人工智能导论'));
+    expect(result.rawText, contains('示例课程甲'));
 
     expect(tt!.courses, isNotEmpty);
     expect(tt.courses.length, greaterThanOrEqualTo(8));
     // 页面里的元信息（学期 / 专业）应当被一并读出来
     expect(tt.semester, contains('2026-2027'));
-    expect(tt.major, contains('机器人工程'));
+    expect(tt.major, contains('示例工程'));
 
-    final course = tt.courses.firstWhere((c) => c.name.contains('人工智能导论'));
-    expect(course.teacher, '韩云');
+    final course = tt.courses.firstWhere((c) => c.name.contains('示例课程甲'));
+    expect(course.teacher, '示例老师A');
     expect(course.location, isNotEmpty);
     expect(course.startWeek, greaterThanOrEqualTo(1));
     expect(course.endWeek, greaterThan(course.startWeek));

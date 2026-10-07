@@ -62,7 +62,7 @@ Future<Uint8List?> loadFixture(String name) async {
 Future<Uint8List> renderSampleImage() async {
   const lines = [
     '星期一 高等数学 明德楼A103 (3-4节)7-18周',
-    '星期二 Python程序设计 格致楼205 (5-6节)7-18周',
+    '星期二 示例课程己 格致楼205 (5-6节)7-18周',
   ];
   const fontSize = 40.0;
   const scale = 2.0;

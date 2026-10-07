@@ -53,7 +53,7 @@ PAGE = """<!DOCTYPE html>
     <thead><tr><th>节次</th><th>星期一</th><th>星期二</th><th>星期三</th>
       <th>星期四</th><th>星期五</th><th>星期六</th><th>星期日</th></tr></thead>
     <tbody>
-      <tr><td>第1-2节</td><td><div class="kbcontent">人工智能导论</div></td>
+      <tr><td>第1-2节</td><td><div class="kbcontent">示例课程甲</div></td>
         <td></td><td></td><td></td><td></td><td></td><td></td></tr>
       <tr><td>第3-4节</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
     </tbody>
@@ -65,33 +65,33 @@ PAGE = """<!DOCTYPE html>
 KBLIST = {
     "kbList": [
         {
-            "kcmc": "人工智能导论",
-            "xm": "韩云",
-            "cdmc": "明德楼B216",
+            "kcmc": "示例课程甲",
+            "xm": "示例老师A",
+            "cdmc": "格致楼216",
             "xqj": "1",
             "jcs": "1-2",
             "zcd": "7-18周",
         },
         {
-            "kcmc": "高等数学Ⅰ（上）",
-            "xm": "曾玉祥",
+            "kcmc": "示例课程戊",
+            "xm": "示例老师B",
             "cdmc": "明德楼A103",
             "xqj": "1",
             "jcs": "3-4",
             "zcd": "1-16周",
         },
         {
-            "kcmc": "大学物理V（上）",
-            "xm": "张熙程",
-            "cdmc": "明德楼B105",
+            "kcmc": "示例课程庚",
+            "xm": "示例老师C",
+            "cdmc": "格致楼105",
             "xqj": "4",
             "jcs": "7-8",
             "zcd": "1-15周(单)",
         },
         {
-            "kcmc": "思想道德与法治",
-            "xm": "代维",
-            "cdmc": "明德楼B303",
+            "kcmc": "示例课程乙",
+            "xm": "示例老师D",
+            "cdmc": "格致楼303",
             "xqj": "5",
             "jcs": "9-10",
             "zcd": "1,3,5-9周",

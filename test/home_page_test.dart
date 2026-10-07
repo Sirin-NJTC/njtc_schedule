@@ -22,8 +22,8 @@ DateTime get _today {
 DateTime get _startOfWeek2 => _today.subtract(const Duration(days: 7));
 
 Course _course() => const Course(
-      name: '高等数学Ⅰ（上）',
-      teacher: '曾玉祥',
+      name: '示例课程戊',
+      teacher: '示例老师B',
       location: '明德楼A103',
       dayOfWeek: 1,
       startSection: 1,
@@ -40,7 +40,7 @@ Future<AppState> _state({DateTime? startDate, int totalWeeks = 20}) async {
     id: 't1',
     name: '测试课表',
     semester: '2026-2027年第1学期',
-    major: '机器人工程',
+    major: '示例工程',
     totalWeeks: totalWeeks,
     startDate: startDate,
     courses: [_course()],
@@ -63,7 +63,7 @@ Future<AppState> _holidayState({
     id: 't1',
     name: '测试课表',
     semester: '2026-2027年第1学期',
-    major: '机器人工程',
+    major: '示例工程',
     totalWeeks: 20,
     startDate: _startOfWeek2,
     courses: courses,

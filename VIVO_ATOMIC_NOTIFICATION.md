@@ -129,7 +129,7 @@ vivo 对原子通知（原子岛）实行**准入制**：只有当 vivo 侧为�
 
 ### 5.2 「下节课预告」→ superx 字段映射
 
-以「高等数学Ⅰ（上）第 3-4 节 10:45 下课，下一节是大学物理V（上）10:55 / 明德楼 B105」为例：
+以「示例课程戊第 3-4 节 10:45 下课，下一节是示例课程庚10:55 / 明德楼 B105」为例：
 
 ```kotlin
 // notification.superx.*
@@ -144,15 +144,15 @@ clickResp      = PendingIntent → MainActivity
 
 // notification.superx.baseInfos.*
 icon           = R.mipmap.ic_launcher
-title          = "「高等数学Ⅰ（上）」10:45 下课"
-content        = "下节课：大学物理V（上） · 10:55 · 明德楼B105"
+title          = "「示例课程戊」10:45 下课"
+content        = "下节课：示例课程庚 · 10:55 · 格致楼105"
 subInfo        = 1                                   // 文本
 subText        = "下节课预告 · 第5-6节"
 subTextColor   = 课程配色（如 0xFF6366F1）
 
 // notification.superx.infos.*（强调信息模版）
 describe       = "下节课预告 · 第5-6节"
-coreInfo       = "下节课：大学物理V（上） · 10:55 · 明德楼B105"
+coreInfo       = "下节课：示例课程庚 · 10:55 · 格致楼105"
 image          = R.mipmap.ic_launcher
 imageClickResp = 同 clickResp
 
@@ -169,7 +169,7 @@ clickResp      = 同 clickResp
 
 // notification.superx.island.*（OriginOS 5.0+ 原子岛）
 leftTemplate   = 1                                   // 图片+文本
-leftInfo       = { icon, content = "大学物理V（上）" }  // 下一节课名
+leftInfo       = { icon, content = "示例课程庚" }  // 下一节课名
 rightTemplate  = 6                                   // 胶囊文本
 rightInfo      = { capsuleContent = "10:55 上课", capsuleBgColor = 课程配色 }
 islandClick    = 1                                   // 跳落地页
@@ -210,8 +210,8 @@ NotificationRecord(... id=6603 ... : Notification(channel=njtc_course_end ...))
   ...
   extras={
     android.title=String (「端到端测试课程A」08:45 下课)
-    android.text=String (下节课：端到端测试课程A · 08:55 · 明德楼B216)
-    android.bigText=String (下节课：端到端测试课程A · 08:55 · 明德楼B216)
+    android.text=String (下节课：端到端测试课程A · 08:55 · 格致楼216)
+    android.bigText=String (下节课：端到端测试课程A · 08:55 · 格致楼216)
     notification.superx.operation=Integer (0)
     notification.superx.showNotify=Boolean (true)
     notification.superx.template=Integer (1)
@@ -315,10 +315,10 @@ RTC_WAKEUP ...: 同上再加 604800000 ms（7 天后同一天）
 App pid **16278**）里，用户这次点了「立即验证」的三个按钮，**App 侧全链路留下证据**：
 
 ```
-[13:04:48.574] [16278] I NjtcNotify: 已发送[普通通知] id=9902 第3-4节 · 高等数学Ⅰ（上） | 10:00 上课 · 明德楼A103 · 曾玉祥
+[13:04:48.574] [16278] I NjtcNotify: 已发送[普通通知] id=9902 第3-4节 · 示例课程戊 | 10:00 上课 · 明德楼A103 · 示例老师B
 [13:04:53.255] [16278] I NjtcVivo  : 已挂载 superx 字段：scene=METTING template=1 rightTemplate=6 keepDuration=1800s islandShowTime=180s
-[13:04:53.262] [16278] I NjtcNotify: 已发送[vivo 原子通知 + 原子岛] id=9901 「高等数学Ⅰ（上）」10:45 下课 | 下节课：大学物理V（上） · 10:55 · 明德楼B105
-[13:05:13.196] [16278] I NjtcNotify: 已发送[普通通知] id=9903 还有 30 分钟上课 · 上午共 3 门课 | 08:00 人工智能导论 @明德楼B216
+[13:04:53.262] [16278] I NjtcNotify: 已发送[vivo 原子通知 + 原子岛] id=9901 「示例课程戊」10:45 下课 | 下节课：示例课程庚 · 10:55 · 格致楼105
+[13:05:13.196] [16278] I NjtcNotify: 已发送[普通通知] id=9903 还有 30 分钟上课 · 上午共 3 门课 | 08:00 示例课程甲 @格致楼216
 ```
 
 * `[vivo 原子通知 + 原子岛]` 这个前缀**只有走原子通知分支才会打**
@@ -330,7 +330,7 @@ App pid **16278**）里，用户这次点了「立即验证」的三个按钮，
   在真机上真的写进去了（模拟器只能证明代码路径，这条证明真机路径）。
 * `scene=METTING` 是**未准入时的默认场景值**（vivo 白名单里没有课程类目）——
   准入后由 vivo 下发的正式场景值替换（见 §5.4）。
-* 顺带拿到一条与原子通知无关但有用的结论：通知文案里的 `明德楼A103 · 曾玉祥`
+* 顺带拿到一条与原子通知无关但有用的结论：通知文案里的 `明德楼A103 · 示例老师B`
   表明 App 里那门课的**地点与教师都在**（对比 §5.3.2 同一设备早一轮的排布日志
   里地点字段为空，说明中途的解析修复生效了）。
 

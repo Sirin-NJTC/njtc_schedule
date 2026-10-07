@@ -38,19 +38,19 @@ void main() {
     test('解析出全部 9 门次课程，且不受 rowspan 影响重复', () {
       final courses = ZfHtmlParser.parseCourses(_fixture());
       expect(courses.length, 9);
-      // 人工智能导论在「周一 1-2 节」和「周二 7-8 节」各一次；
+      // 示例课程甲在「周一 1-2 节」和「周二 7-8 节」各一次；
       // 课程格 rowspan=2 若被按行展开会变成 4 次。
-      expect(_count(courses, '人工智能导论'), 2);
-      expect(_count(courses, '思想道德与法治'), 2);
+      expect(_count(courses, '示例课程甲'), 2);
+      expect(_count(courses, '示例课程乙'), 2);
     });
 
     test('字段齐全：课程名 / 教师 / 地点 / 课程代码 / 教学班组成', () {
       final courses = ZfHtmlParser.parseCourses(_fixture());
-      final c = _find(courses, 1, 1, '人工智能导论');
-      expect(c.teacher, '韩云');
-      expect(c.location, '明德楼B216');
+      final c = _find(courses, 1, 1, '示例课程甲');
+      expect(c.teacher, '示例老师A');
+      expect(c.location, '格致楼216');
       expect(c.courseCode, 'ZB1040282-07');
-      expect(c.className, '智26.8');
+      expect(c.className, '演示26.8');
       expect(c.startSection, 1);
       expect(c.endSection, 2);
       expect(c.startWeek, 7);
@@ -65,16 +65,16 @@ void main() {
           .toList();
       expect(tue.length, 2);
 
-      final sx = _find(courses, 2, 5, '思想道德与法治');
+      final sx = _find(courses, 2, 5, '示例课程乙');
       expect(sx.oddEven, 1); // 单周
       expect(sx.startWeek, 7);
       expect(sx.endWeek, 17);
-      expect(sx.location, '明德楼B112');
-      expect(sx.teacher, '代维');
+      expect(sx.location, '格致楼112');
+      expect(sx.teacher, '示例老师D');
       expect(sx.courseCode, 'GB0640014-10');
-      expect(sx.className, '智26.7;智26.8');
+      expect(sx.className, '演示26.7;演示26.8');
 
-      final xl = _find(courses, 2, 5, '大学生心理健康教育');
+      final xl = _find(courses, 2, 5, '示例课程丙');
       expect(xl.oddEven, 2); // 双周
       expect(xl.startWeek, 8);
       expect(xl.endWeek, 12);
@@ -91,20 +91,20 @@ void main() {
       expect(thu.map((c) => c.endWeek).toList(), [10, 15, 18]);
       expect(
         thu.map((c) => c.name).toList(),
-        ['国家安全教育', '大学物理V（上）', '高等数学Ⅰ（上）'],
+        ['示例课程癸', '示例课程庚', '示例课程戊'],
       );
     });
 
     test('晚上 9-10 节与双周（节次由单元格自带信息给出）', () {
       final courses = ZfHtmlParser.parseCourses(_fixture());
-      final c = _find(courses, 1, 9, '思想道德与法治');
+      final c = _find(courses, 1, 9, '示例课程乙');
       expect(c.startSection, 9);
       expect(c.endSection, 10);
       expect(c.startWeek, 12);
       expect(c.endWeek, 14);
       expect(c.oddEven, 2);
-      expect(c.location, '明德楼B303');
-      expect(c.teacher, '代维');
+      expect(c.location, '格致楼303');
+      expect(c.teacher, '示例老师D');
     });
 
     test('没有课的星期不会凭空生成课程', () {
@@ -119,7 +119,7 @@ void main() {
       final tt = ZfHtmlParser.parseTimetable(_fixture(), name: '网页导入');
       expect(tt, isNotNull);
       expect(tt!.semester, '2026-2027年第1学期');
-      expect(tt.major, '机器人工程');
+      expect(tt.major, '示例工程');
       expect(tt.totalWeeks, 20);
       expect(tt.startDate, DateTime(2026, 8, 31));
       expect(tt.name, '网页导入');
@@ -137,7 +137,7 @@ void main() {
     /// 一批正方版本不用 `<hr>`，而是在 HTML 里直接写一行连续短横线（`-----`）。
     const dashed = '''
 <html><head><title>学生课表</title></head><body>
-<div id="head">2026-2027学年 第1学期&nbsp;&nbsp;专业：机器人工程</div>
+<div id="head">2026-2027学年 第1学期&nbsp;&nbsp;专业：示例工程</div>
 <table id="kbtable" class="table table-bordered">
   <tr>
     <th>节次</th>
@@ -146,7 +146,7 @@ void main() {
   </tr>
   <tr>
     <td rowspan="2">上午<br>一<br>1-2节</td>
-    <td rowspan="2"><div class="kbcontent">高等数学Ⅰ（上）<br><font title="教师">曾玉祥</font><br><font title="周次(节次)">1-16周(1-2节)</font><br><font title="地点">明德楼A103</font></div>-----<div class="kbcontent">大学英语<br><font title="教师">李梅</font><br><font title="周次(节次)">1-16周(1-2节)</font><br><font title="地点">明德楼B201</font></div></td>
+    <td rowspan="2"><div class="kbcontent">示例课程戊<br><font title="教师">示例老师B</font><br><font title="周次(节次)">1-16周(1-2节)</font><br><font title="地点">明德楼A103</font></div>-----<div class="kbcontent">示例课程子<br><font title="教师">示例老师K</font><br><font title="周次(节次)">1-16周(1-2节)</font><br><font title="地点">格致楼201</font></div></td>
     <td></td><td></td><td></td><td></td><td></td><td></td>
   </tr>
   <tr></tr>
@@ -158,21 +158,21 @@ void main() {
       final courses = ZfHtmlParser.parseCourses(dashed);
       expect(courses.length, 2, reason: '同格两门课必须切开');
 
-      final math = _find(courses, 1, 1, '高等数学Ⅰ（上）');
-      expect(math.teacher, '曾玉祥');
+      final math = _find(courses, 1, 1, '示例课程戊');
+      expect(math.teacher, '示例老师B');
       expect(math.location, '明德楼A103');
       expect(math.endSection, 2);
       expect(math.startWeek, 1);
       expect(math.endWeek, 16);
 
-      final en = _find(courses, 1, 1, '大学英语');
-      expect(en.teacher, '李梅');
-      expect(en.location, '明德楼B201');
+      final en = _find(courses, 1, 1, '示例课程子');
+      expect(en.teacher, '示例老师K');
+      expect(en.location, '格致楼201');
     });
 
     test('单个短横线（课程代码里的）不会被误当成分隔符', () {
       final courses = ZfHtmlParser.parseCourses(dashed);
-      final math = _find(courses, 1, 1, '高等数学Ⅰ（上）');
+      final math = _find(courses, 1, 1, '示例课程戊');
       expect(math.name.contains('-'), isFalse);
       // 课程代码形如 ZB1040282-07，只有一个短横线，不能被切碎
       final withCode = ZfHtmlParser.parseCourses(
@@ -182,7 +182,7 @@ void main() {
         ),
       );
       expect(withCode.length, 2);
-      expect(_find(withCode, 1, 1, '高等数学Ⅰ（上）').courseCode, 'ZB1040282-07');
+      expect(_find(withCode, 1, 1, '示例课程戊').courseCode, 'ZB1040282-07');
     });
   });
 

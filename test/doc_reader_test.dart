@@ -83,9 +83,9 @@ void main() {
           '{\\fonttbl{\\f0\\fnil\\fcharset134 SimSun;}}'
           '{\\colortbl;\\red0\\green0\\blue0;}'
           '{\\*\\generator Riched20 10.0.19041;}'
-          '星期一 大学英语 明德楼B309 (1-2节)1-16周\\par}';
+          '星期一 示例课程子 格致楼309 (1-2节)1-16周\\par}';
       final text = DocReader.readText(_u(utf8.encode(rtf)))!;
-      expect(text, contains('大学英语'));
+      expect(text, contains('示例课程子'));
       expect(text, isNot(contains('SimSun')));
       expect(text, isNot(contains('Riched20')));
       expect(text, isNot(contains('colortbl')));
@@ -97,8 +97,8 @@ void main() {
       const html = '<html><head><style>td{color:red}</style></head><body>'
           '<table>'
           '<tr><td>节次</td><td>星期一</td><td>星期二</td></tr>'
-          '<tr><td>上午一</td><td>高等数学Ⅰ（上）/(3-4节)7-18周/ 明德楼A103/曾玉祥</td><td></td></tr>'
-          '<tr><td>下午三</td><td></td><td>Python程序设计/(5-6节)7-18周/ 格致楼205/徐双</td></tr>'
+          '<tr><td>上午一</td><td>示例课程戊/(3-4节)7-18周/ 明德楼A103/示例老师B</td><td></td></tr>'
+          '<tr><td>下午三</td><td></td><td>示例课程己/(5-6节)7-18周/ 格致楼205/示例老师E</td></tr>'
           '<tr><td>说明</td><td>课程&amp;地点&nbsp;以教务系统为准</td></tr>'
           '</table></body></html>';
       final text = DocReader.readText(_u(utf8.encode(html)))!;
@@ -107,9 +107,9 @@ void main() {
       expect(text, contains('课程&地点 以教务系统为准'));
 
       final tt = DocumentParser.parse(text);
-      expect(tt.courses.any((c) => c.name.contains('高等数学') && c.dayOfWeek == 1),
+      expect(tt.courses.any((c) => c.name.contains('示例课程戊') && c.dayOfWeek == 1),
           isTrue);
-      expect(tt.courses.any((c) => c.name.contains('Python') && c.dayOfWeek == 2),
+      expect(tt.courses.any((c) => c.name.contains('示例课程己') && c.dayOfWeek == 2),
           isTrue);
     });
   });
@@ -123,7 +123,7 @@ void main() {
         0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, //
         ..._utf16le('星期一 高等数学 明德楼A103 (3-4节)7-18周'),
         ..._utf16le('\r'),
-        ..._utf16le('星期二 Python程序设计 格致楼205 (5-6节)7-18周'),
+        ..._utf16le('星期二 示例课程己 格致楼205 (5-6节)7-18周'),
         ..._utf16le('\r'),
       ]);
       expect(DocReader.looksLikeOle2(bytes), isTrue);
@@ -131,13 +131,13 @@ void main() {
       final text = DocReader.readText(bytes)!;
       expect(text, contains('星期一'));
       expect(text, contains('高等数学'));
-      expect(text, contains('Python程序设计'));
+      expect(text, contains('示例课程己'));
 
       final tt = DocumentParser.parse(text);
       expect(tt.courses.length, 2);
       expect(tt.courses[0].dayOfWeek, 1);
       expect(tt.courses[0].location, '明德楼A103');
-      expect(tt.courses[1].name, 'Python程序设计');
+      expect(tt.courses[1].name, '示例课程己');
       expect(tt.courses[1].dayOfWeek, 2);
     });
 
@@ -150,9 +150,9 @@ void main() {
   group('纯文本 / CSV', () {
     test('UTF-8 文本原样收下', () {
       final text = DocReader.readText(
-        _u(utf8.encode('星期一 大学生心理健康教育 明德楼B309 (1-2节)1-16周')),
+        _u(utf8.encode('星期一 示例课程丙 格致楼309 (1-2节)1-16周')),
       );
-      expect(text, '星期一 大学生心理健康教育 明德楼B309 (1-2节)1-16周');
+      expect(text, '星期一 示例课程丙 格致楼309 (1-2节)1-16周');
     });
 
     test('GBK 文本不乱码', () {
