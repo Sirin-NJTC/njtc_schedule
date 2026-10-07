@@ -111,38 +111,59 @@
 
 ## 🖼️ 界面预览
 
-### 真机效果（Android 模拟器实测截图）
+> **这些截图全部来自 Android 模拟器（API 37），课表内容是虚构的演示数据**
+> （`高等数学` / `示例老师A` / `明德楼A101` 之类），仓库里不存在任何真机截图。
+> 想自己复现：`flutter run -t lib/dev/demo_seed.dart -d <模拟器>` 会先灌一份全虚构的
+> 演示课表再进首页（见 [`lib/dev/demo_seed.dart`](lib/dev/demo_seed.dart)）。
 
-| 课表主界面（导入真实课表后） | 空状态（首次启动） |
+### 课表主界面 / 空状态
+
+| 课表主界面（演示课表） | 空状态（首次启动） |
 | --- | --- |
 | ![课表主界面](screenshots/01-timetable-grid.png) | ![空状态](screenshots/02-empty-state.png) |
 
-> 两张截图都是**在本项目真实运行的 App 上**截取的（Android 模拟器 API 37），
-> 不是效果图。左侧截图为导入真实教务系统 `智26.8课表.xls` 后的渲染结果。
+> 左边是模拟器上灌入演示课表后的渲染结果：周一 ~ 周五各色课程块、连堂课（周二
+> `程序设计基础` 一次占 1-4 节）会画成一块、左侧是节次时间。右边是首次启动的空状态。
 
-### v1.3.0 新增功能（真机实测截图）
+### 放假日（假期合并 + 放假当天不提醒）
 
-| 放假日按节日合并成一行（36 天 · 8 段） | 一行一行往下看 | 「调整假期」弹层（改名字 / 起止 / 加减天数） |
+| 当天是法定假期（列头写「放假」） | 放假日列表（按节日合并成一行） | 「调整假期」弹层（改名字 / 起止 / 加减天数） |
 | --- | --- | --- |
-| ![合并显示](screenshots/holiday_merged_v130.png) | ![合并列表](screenshots/holiday_rows_v130.png) | ![调整假期](screenshots/holiday_editor_v130.png) |
+| ![放假当天](screenshots/03-home-holiday.png) | ![合并显示](screenshots/08-holiday-merged.png) | ![调整假期](screenshots/09-holiday-editor.png) |
 
-> 同样是 **vivo 真机（Android 17 / arm64）**、装着作者本人真实课表（节假日已联网更新成官方数据）截的：
-> 以前国庆 7 天就是 7 行、一共 36 行；现在按「节日名 + 日期连续」合并成 **8 行**
-> （元旦 3 天 / 春节 9 天 / 清明节 3 天 / 劳动节 5 天 / 端午节 3 天 / 中秋节 3 天 / 国庆节 7 天…），
-> 卡片右上角是总览 `36 天 · 8 段`。第三张是点开「春节」那一行后的弹层：
+> 第一张：演示课表的「今天」正好落在国庆假期里 —— 列头写「放假」，当天的课被淡化/隐藏。
+> 第二张：以前国庆 7 天就是 7 行、一年 36 行；v1.3.0 起按「节日名 + 日期连续」合并成
+> **8 行**（元旦 3 天 / 春节 9 天 / 清明节 3 天 / 劳动节 5 天 / 端午节 3 天 / 中秋节 3 天 /
+> 国庆节 7 天…），卡片右上角是总览 `36 天 · 8 段`。第三张是点开「春节」那一行后的弹层：
 > 可以改节日名、改开始 / 结束日期，也可以用「−／＋」直接加减天数（1 ~ 120 天）。
-> 截图里点的是**取消**，没动作者本人的真实日历（取消后卡片仍是 `36 天 · 8 段`）。
 
-### v1.2.0 新增功能（真机实测截图）
+### 课表全览 / 导入 / 本地 OCR
 
-| 课表全览（本周放大成一整页） | 导入页（文件 / OCR 入口） | 识别结果确认（真机 OCR 置信度 83%） |
+| 课表全览（整周一页，双指缩放） | 导入页（文件 / OCR 入口） | 识别结果确认（本机离线 OCR） |
 | --- | --- | --- |
-| ![课表全览](screenshots/overview_v120.png) | ![导入页](screenshots/import_ocr_v120.png) | ![识别结果](screenshots/ocr_result_v120.png) |
+| ![课表全览](screenshots/04-week-overview.png) | ![导入页](screenshots/05-import-options.png) | ![识别结果](screenshots/06-ocr-result.png) |
 
-> 三张都是在 **vivo 真机（Android 17 / arm64）** 上、装着作者本人真实课表的状态下截的：
-> 全览页里周二 / 今天两列正好是**国庆假期**（列头写「放假」、格子里的课被淡化）；
-> 第三张是「拍照 / 相册 OCR」跑完后的确认框 —— 识别**在本机离线完成**，
-> 文字可以直接改，确认无误才会解析导入（截图里故意点了「取消」，没有动真实课表）。
+> 全览页把当前这一周放大成一整页（左右箭头翻周、双指缩放、拖动看细节）；
+> 导入页有四个入口，其中「导入课表文件」支持 `.xls / .xlsx / .docx / .doc / .pdf / 图片 / .txt`，
+> 「拍照 / 相册 OCR 识别」把纸质课表或截图离线识别成文字。
+> 第三张是识别完成后的确认框 —— OCR **完全在本机进行**（不联网、不上传），
+> 文字可以直接改，确认无误才会解析导入。识别用的样例图片由
+> [`tool/make_demo_timetable_photo.py`](tool/make_demo_timetable_photo.py) 生成（内容同样是虚构的）。
+
+| 解析导入成功 |
+| --- |
+| ![导入成功](screenshots/07-import-success.png) |
+
+> 确认后会立刻解析成课程并提示结果；这份演示数据里没有学期起始日期，所以顺带提示去「设置」补上。
+
+### 桌面小组件
+
+| 「设置 → 桌面小组件」里的启用说明 |
+| --- |
+| ![小组件说明](screenshots/10-widget-guide.png) |
+
+> 小组件本体画在系统桌面上，截图会带进手机壁纸与桌面图标，所以这里只放应用内的启用说明页；
+> 小组件「今天上什么课」的真实渲染由 `integration_test/widget_render_e2e_test.dart` 断言覆盖。
 
 ### 免安装网页预览
 
@@ -476,18 +497,20 @@ njtc_schedule/
 │       ├── ocr_sample.pdf               # OCR 夹具：同一张图存成 PDF（验 PdfRenderer 渲染）
 │       └── extract_payload_jsdom.json   # 抓取脚本在真 DOM（jsdom）上跑出来的载荷
 ├── integration_test/
-│   ├── reminder_e2e_test.dart           # 真机端到端：排闹钟 → 发通知 → superx 字段
-│   ├── holiday_reminder_e2e_test.dart   # 真机端到端：放假日不排闹钟 / 补班日换周几排
-│   ├── web_import_e2e_test.dart         # 真机端到端：WebView 抓 DOM → 解析成课表
-│   ├── jwglxt_json_e2e_test.dart        # 真机端到端：WebView 打教务数据接口 → 解析成课表
-│   ├── jwglxt_proxy_e2e_test.dart       # 真机端到端：反向代理形态（内江师范真实地址）
-│   └── widget_render_e2e_test.dart      # 真机端到端：把小组件「会画成什么样」问出来（探针）
-│   └── ocr_e2e_test.dart                # 真机端到端：tessdata 随包落地 + 图片/PDF 真识别
+│   ├── reminder_e2e_test.dart           # 设备端到端：排闹钟 → 发通知 → superx 字段
+│   ├── holiday_reminder_e2e_test.dart   # 设备端到端：放假日不排闹钟 / 补班日换周几排
+│   ├── web_import_e2e_test.dart         # 设备端到端：WebView 抓 DOM → 解析成课表
+│   ├── jwglxt_json_e2e_test.dart        # 设备端到端：WebView 打教务数据接口 → 解析成课表
+│   ├── jwglxt_proxy_e2e_test.dart       # 设备端到端：反向代理形态（内江师范真实地址）
+│   ├── widget_render_e2e_test.dart      # 设备端到端：把小组件「会画成什么样」问出来（探针）
+│   └── ocr_e2e_test.dart                # 设备端到端：tessdata 随包落地 + 图片/PDF 真识别
 ├── tool/
 │   ├── jwglxt_fixture_server.py         # 正方数据接口 + 反向代理固件服务（仅测试用）
 │   ├── make_ocr_fixture.py              # 生成 OCR 夹具（课表 PNG + 同图 PDF，Pillow）
+│   ├── make_demo_timetable_photo.py     # 生成截图用的「纸质课表照片」（内容全虚构）
 │   └── make_widget_preview.py           # 生成小组件预览图（Pillow，纯离线）
-├── screenshots/                         # 真机实测截图
+├── lib/dev/demo_seed.dart               # 截图用：往模拟器灌一份全虚构的演示课表
+├── screenshots/                         # 界面截图（一律来自模拟器，不含真机截图）
 ├── android/                             # 平台工程（已生成）
 ├── preview.html                         # 免安装界面预览
 ├── VIVO_ATOMIC_NOTIFICATION.md          # vivo 原子通知接入说明 + 申请邮件模板
@@ -544,15 +567,16 @@ Android SDK 36）上实测：
   - 真机上装 1.1.9 后，手工广播刷新让 `dumpsys appwidget` 里我们的 `views=` 句柄从
     `@f8038c6` 变成 `@ee520b5`（宿主收下新 RemoteViews、无 inflate 异常），
     桌面截图显示 `10 月 4 日 周日 / 第 5 周 / 今天没课 / 今天没课，好好休息`
-    （见 `screenshots/widget_ok_real_device.png`，今天确实没课，判断是对的）。
-    白卡的真因、探针手法与教训见 `BUILD_NOTES.md` §9.14。
+     （当时确认今天确实没课，判断是对的）。白卡的真因、探针手法与教训见 `BUILD_NOTES.md` §9.14。
+     *（那张真机截图已按「仓库不放真机截图」的约定删除，小组件的渲染改由
+     `integration_test/widget_render_e2e_test.dart` 的断言守住。）*
 - **连堂课块真的撑满它所占的节次**（v1.1.10 修的老 bug）：课表网格里课程块的高度
   = `(endSection - startSection + 1) × sectionHeight`，`test/timetable_grid_test.dart`
   新增三条用例**量像素**守住这条不变量（跨 4 小节 = 296px、跨 2 小节 = 148px）。
   改之前实测分别只有 **42px / 61px** —— 卡片高度只跟文字几行有关，
   于是「多节连堂的课在课表上只占一节」（用户 2026-10-04 反馈）。
   根因是里层 `Stack` 用了默认的 `StackFit.loose`，见 `BUILD_NOTES.md` §9.15；
-  真实课表的渲染对照图见 `screenshots/grid_span_fix_110.png`。
+  渲染对照图见 `screenshots/01-timetable-grid.png`（周二 `程序设计基础` 一次占 1-4 节）。
 - **节假日 / 调休补班日真的会改闹钟**（v1.1.11）：
   `integration_test/holiday_reminder_e2e_test.dart` 在模拟器（API 37）上
   **`+1: All tests passed!`**，三个场景互为对照 ——
@@ -586,17 +610,16 @@ Android SDK 36）上实测：
   专业 `机器人工程`、起始日 `2026-08-31`、总周数 20），教师 / 地点 / 周次 / 节次
   全部正确
 - **v1.2.0 三项新功能都在设备上跑过**：
-  - **课表全览**：真机（vivo V2520A / Android 17 / arm64）进入后整周一页、
-    翻周箭头与「回到本周」正常，放假那几天的格子按 `active=false` 淡化显示
-    （见 `screenshots/overview_v120.png`）
+  - **课表全览**：进入后整周一页、翻周箭头与「回到本周」正常，放假那几天的格子按
+    `active=false` 淡化显示（模拟器截图见 `screenshots/04-week-overview.png`）
   - **多格式导入**：`.docx` / `.doc` / `.pdf` / `.html` / `.rtf` / `.txt`
     各有单测（含 OLE2、RTF 转义、HTML 实体、GBK 嗅探），共 35 条
   - **离线 OCR**：`integration_test/ocr_e2e_test.dart` 在 Android 17 / API 37
     模拟器上 **`All tests passed!`（4/4）** —— 语言模型从安装包复制到应用目录、
     图片识别出「星期一 高等数学 明德楼A103 (3-4节)7-18周」（置信度 82%）、
     PDF 经系统 `PdfRenderer` 逐页识别、坏字节抛 `OcrException` 而不是崩溃；
-    真机 arm64 上从相册选图识别，确认框显示 **置信度 83%**、文字可编辑
-    （见 `screenshots/ocr_result_v120.png`）
+    相册选图后的确认框显示识别置信度、文字可编辑
+    （模拟器截图见 `screenshots/06-ocr-result.png`）
   - `flutter analyze` **0 issue**、`flutter test` **310 passed**（22 个单元测试文件
     + 7 个 `integration_test/*_e2e_test.dart`）
 

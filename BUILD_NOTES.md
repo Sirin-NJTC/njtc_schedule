@@ -1468,7 +1468,8 @@ BatteryStatsService / ActivityTaskManager` 这些系统行，整个 buffer 只�
    updateAppWidget` 在真机上带着**真实的 22 门课存档**跑通了，而且宿主收下了新 RemoteViews、没抛 inflate 异常。
 3. 亮屏 + `input keyevent 3`（HOME）后 `dumpsys window` 已是
    `mCurrentFocus=Window{… com.bbk.launcher2/com.bbk.launcher2.Launcher type=1}`、`mDreamingLockscreen=false`，
-   直接 `screencap` 把桌面拍下来（存 `screenshots/widget_ok_real_device.png`）：
+   直接 `screencap` 把桌面拍下来（当时存成了 `screenshots/widget_ok_real_device.png`，
+   **该真机截图已删**，见 §9.24）：
 
    ```
    10 月 4 日 周日                          第 5 周
@@ -1557,7 +1558,8 @@ child: Stack(
 * `flutter analyze` → **No issues found**；`flutter test --reporter compact` → **126 用例全绿**（123 + 3）。
 * **把真实课表渲染成 PNG 肉眼看一遍**：临时写了个 `test/zz_render_preview_test.dart`
   （用完即删），用 `XlsReader` + `TimetableParser` 读真实 `test/fixtures/njtc_sample.xls`，
-  再 `RenderRepaintBoundary.toImage()` 导出 `screenshots/grid_span_fix_110.png`。
+  再 `RenderRepaintBoundary.toImage()` 导出了一张对照图（`screenshots/grid_span_fix_110.png`，
+  **因来自真实课表已删**，见 §9.24；现在同样效果的对照图见 `screenshots/01-timetable-grid.png`）。
   图里每一块课程都**正好铺满它占的两行**（含右上角单双周角标），
   连堂「只占一节」的样子确实没了。
   （注意：widget 测试里的中文会渲染成方块，那是测试字体，不是 bug；这张图是用来看**版式**的。）
@@ -2219,8 +2221,9 @@ v1.1.13 的 Release 里资产叫 `app-arm64-v8a-release.apk` 这种 Gradle 原�
   NjtcWidget: 渲染#32 10月7日 周三 第6周 行数=0 页脚=今天放假 · 国庆节    ← Dart 推完日历之后
   NjtcWidget: 已同步小组件数据 hasTimetable=true timetable=3996B periods=355B holidays=995B
   ```
-  桌面小组件实拍见 `screenshots/widget_holiday_v114.png`，
-  界面（列头「放假」+ 倒计时「明天 16:30 国家安全教育」）见 `screenshots/home_holiday_v114.png`。
+  当时拍了两张真机截图（桌面小组件、首页列头「放假」+ 倒计时「明天 16:30 国家安全教育」），
+  **按「仓库不放真机截图」的约定已删**，见 §9.24；这轮的行为由
+  `integration_test/holiday_reminder_e2e_test.dart` 与 §9.21.8 的 logcat 原文守住。
 * 「法定节假日 → 立即联网更新」这条路（v1.1.13 漏推的三条之一，**以前改完日历小组件不动**）：
   ```
   I/flutter: HolidaySync: ok=true note=2026 年 放假=36 补班=6 silent=false
@@ -2572,8 +2575,9 @@ v1.1.13 的 Release 里资产叫 `app-arm64-v8a-release.apk` 这种 Gradle 原�
 名称 `春节`、开始 `2026-02-15 周日`、结束 `2026-02-23 周一`、`时长：9 天` + `−` / `＋`、
 底部 `删除这一段` / `取消` / `保存`；**点「取消」后卡片仍是 `36 天 · 8 段`**（没动真实数据）。
 「关于」页显示 `内师课程表 v1.3.0` 与新加的那段节假日说明。
-截图存 `screenshots/holiday_merged_v130.png`、`holiday_rows_v130.png`、`holiday_editor_v130.png`
-（README 已引用）。
+当时存的三张真机截图（`holiday_merged_v130.png` / `holiday_rows_v130.png` /
+`holiday_editor_v130.png`）**已按 §9.24 的约定删掉**，换成模拟器上同样界面的
+`screenshots/08-holiday-merged.png` 与 `screenshots/09-holiday-editor.png`。
 
 > 真机交互的两个坑（下次少走弯路）：①`read_image` 给的预览是 878×1932，设备是 1440×3168，
 > **预览坐标 ×1.64 才是 `adb shell input tap` 的坐标**（不是图注里那个 ×1.04 的 normalized 副本）；
@@ -2598,6 +2602,48 @@ v1.1.13 的 Release 里资产叫 `app-arm64-v8a-release.apk` 这种 Gradle 原�
 * 提交：`8843548`（10 文件 / +1577 −96）→ 推送 `78fe9c6..8843548` → tag `v1.3.0`；
   随后 `6de38a1` 补真机截图与冒烟记录。源码包 `D:\DSH\njtc_schedule_source.zip` = 150 文件 / 12020.4 KB
   （`make_zip.ps1` 的 excludePaths 仍排除 `android\app\src\main\assets\tessdata`）。
+
+## 9.24 仓库里不放真机截图：全部换成模拟器 + 虚构演示数据
+
+**起因**：v1.3.0 交付后用户明确要求（原话）「不要上传我的真机截图，将所有真机截图从 github
+中删除可用模拟器截图代替，后续更新也不要上传真机截图」。此前 `screenshots/` 里 14 张图全是在
+作者本人的 vivo（V2520A / Android 17 / arm64）上拍的，装着**本人真实课表**（真实课程名、
+教师、教室）——属于个人信息，不该进公开仓库。
+
+**做法**：
+1. **造一份全虚构的演示课表**：`lib/dev/demo_seed.dart`（跑 `flutter run -t lib/dev/demo_seed.dart
+   -d <模拟器>`）—— 12 门通用课名的课（高等数学 / 大学英语 / 程序设计基础（周二 1-4 连堂）/
+   大学物理 / 体育 / 中国近现代史纲要 / 数据结构（1-9 周 + 10-18 周两段）/ 电路分析 /
+   形势与政策（1-8 周）/ 大学物理实验（9-18 周）/ 线性代数（周六）），教师一律「示例老师A~J」、
+   教室 `明德楼A101` / `格致楼205` 之类；灌之前先 `removeTimetable` 清空，顺手
+   `syncHolidaysFromNetwork()` 把日历换成官方 36 天（这样截图里的 `36 天 · 8 段` 是真数据）。
+2. **模拟器选 `Medium_Phone_API_37.0`（1080×2400）**，截图前 `adb install -r` 装 x86_64 release 包
+   （同签名覆盖安装**保留数据**，debug 包其实也没横幅 —— 本项目 `debugShowCheckedModeBanner: false`）。
+3. **OCR 截图用合成照片**：`tool/make_demo_timetable_photo.py`（Pillow）画一张 1240×1650 的
+   「纸质课表照片」，内容与演示课表一致、全虚构；`adb push` 到 `/sdcard/Pictures/` 再
+   `am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE` 让相册能选到。
+4. **新截图命名去掉版本/设备痕迹**：`01-timetable-grid` / `02-empty-state` / `03-home-holiday` /
+   `04-week-overview` / `05-import-options` / `06-ocr-result` / `07-import-success` /
+   `08-holiday-merged` / `09-holiday-editor` / `10-widget-guide`。
+5. **桌面小组件那张不再放**：小组件画在系统桌面上，截图必然带进壁纸与桌面图标（挑选/拖动
+   组件也只能靠 `input swipe` 摸黑试，模拟器上没成功放上去），改成放应用内
+   「设置 → 桌面小组件」的启用说明页；小组件「今天上什么课」的真实渲染由
+   `integration_test/widget_render_e2e_test.dart` 的断言守住。
+
+**踩坑与经验**：
+* `flutter test integration_test/xxx_test.dart` 跑完会**把 App 卸载**（日志里的
+  `Uninstalling old version...` + 之后 `am start` 报 `Activity class does not exist`），
+  所以「先用 E2E 灌数据、再截 release 版」这条路走不通 —— 要留数据就用 `flutter run` 的入口
+  （`lib/dev/demo_seed.dart`），它退出时不会卸载。
+* 模拟器是 **Google APIs 镜像，`adb root` 不行**（`adbd cannot run as root in production builds`），
+  不能靠 `adb push` 直接往 `/data/data/<pkg>/` 塞存档，只能走应用自己的入口或界面。
+* 系统相册选择器（`DocumentsUI` 的「选择照片」）里，**超宽图片会被放大成一整屏的「一张图」**，
+  `input tap` 点不动它；换成接近 4:3 的竖图（这里 1240×1650）就是正常小格，一点就选中。
+* 截图统一 `adb shell screencap -p /sdcard/x.png` + `adb pull`（`exec-out` 重定向会写出坏 PNG）；
+  `read_image` 预览是 838×1862、设备 1080×2400 ⇒ **预览坐标 ×1.289** 才是 `input tap` 的坐标。
+* 交互坐标（1080×2400）：底部导航「课表 / 导入 / 切换 / 设置」≈ x 143 / 432 / 666 / 926，y 2271；
+  首页头部三个按钮（课表全览 / 加号 / 铃铛）≈ (759, 189) / (879, 189) / (999, 189)；
+  设置页「法定节假日」≈ (619, 1724)、「桌面小组件」≈ (619, 1976)。
 
 
 
